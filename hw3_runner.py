@@ -23,7 +23,6 @@ if __name__ == "__main__":
     print("Loading training data")
     training_data = hw3.read_dataset(os.path.join(data_path,
                                                   "en-wsj-train.pos"))
-    training_vocab = hw3.extract_vocabulary(training_data)
 
     print("Loading in-domain validation data")
     dev_in_data = hw3.read_dataset(os.path.join(data_path, "en-wsj-dev.pos"))
@@ -38,8 +37,8 @@ if __name__ == "__main__":
     # Set up and train the local tag scorer.
     print("Training scorer")
     scorer = hw3.TrigramScorer()
-    scorer.train(hw3.extract_all_trigrams(training_data))
-    model = hw3.POSTagger(training_vocab, scorer)
+    scorer.train(training_data)
+    model = hw3.POSTagger(scorer)
 
     print("Testing in-domain performance")
     acc, unk = model.test(dev_in_data)

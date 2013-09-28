@@ -4,9 +4,8 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = []
+__all__ = ["read_dataset", "TagScorer", "TrigramScorer", "POSTagger"]
 
-import numpy as np
 from math import log
 from collections import defaultdict
 
@@ -59,7 +58,8 @@ class TagScorer(object):
         self.words = defaultdict(lambda: Counter(float))
         self.unknown = Counter(float)
 
-    def train(self, trigrams):
+    def train(self, sentences):
+        trigrams = extract_all_trigrams(sentences)
         self.seen = []
         for trigram in trigrams:
             ppt, pt, t, w = trigram
@@ -89,7 +89,8 @@ class TrigramScorer(object):
         self.p_tag_ptag = defaultdict(lambda: Counter(float))
         self.p_tag_pptag = defaultdict(lambda: Counter(float))
 
-    def train(self, trigrams):
+    def train(self, sentences):
+        trigrams = extract_all_trigrams(sentences)
         self.words = set([])
         for trigram in trigrams:
             ppt, pt, t, w = trigram
@@ -132,8 +133,7 @@ class TrigramScorer(object):
 
 class POSTagger(object):
 
-    def __init__(self, vocab, scorer):
-        self.vocab = set(vocab)
+    def __init__(self, scorer):
         self.scorer = scorer
 
     def decode(self, sentence):
@@ -148,6 +148,7 @@ class POSTagger(object):
         if outfile is not None:
             open(outfile, "w")
 
+        vocab = self.scorer.words
         correct, total = 0, 0
         unk, unk_total = 0, 0
         for sentence in sentences:
@@ -162,9 +163,12 @@ class POSTagger(object):
 
             correct += sum([t1 == t2 for t1, t2 in zip(gold, guess)])
             total += len(words)
+
+            # Check unknown word accuracy.
             tmp = zip(*[[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
-                        if w not in self.vocab])
+                        if w not in vocab])
             if len(tmp):
                 unk += sum(tmp[0])
                 unk_total += sum(tmp[1])
+
         return correct / total, unk / unk_total
