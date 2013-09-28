@@ -7,6 +7,7 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = []
 
 import numpy as np
+from math import log
 from collections import defaultdict
 
 START = "<S>"
@@ -75,12 +76,14 @@ class TagScorer(object):
         ppt, pt, w = trigram
         probs = self.words[w] if w in self.words else self.unknown
         # allowed = [t for t in probs if " ".join([ppt, pt, t]) in self.seen]
-        return [(t, np.log(v)) for t, v in probs.items()]
+        return [(t, log(v)) for t, v in probs.items()]
 
 
 class TrigramScorer(object):
 
-    def __init__(self):
+    def __init__(self, lambda2=0.3, lambda3=0.6):
+        self.lambda2 = lambda2
+        self.lambda3 = lambda3
         self.p_word_tag = defaultdict(lambda: Counter(float))
         self.p_tag = Counter(float)
         self.p_tag_ptag = defaultdict(lambda: Counter(float))
@@ -119,10 +122,12 @@ class TrigramScorer(object):
 
         # Loop over possible tags and compute the scores.
         l2, l3 = self.lambda2, self.lambda3
-        return [(t, np.log((1-l2-l3)*tag_prior + l2*self.p_tag_ptag[pt][t]
-                           + l3*self.p_tag_pptag[" ".join([ppt, pt])][t])
-                 + np.log(self.p_word_tag[t][w]))
-                for t, tag_prior in self.p_tag.items()]
+        p2 = self.p_tag_ptag[pt]
+        p3 = self.p_tag_pptag[" ".join([ppt, pt])]
+        return [(t, log((1-l2-l3)*tag_prior + l2*p2[t] + l3*p3[t])
+                 + log(self.p_word_tag[t][w]))
+                for t, tag_prior in self.p_tag.items()
+                if w in self.p_word_tag[t]]
 
 
 class POSTagger(object):
@@ -134,9 +139,9 @@ class POSTagger(object):
     def decode(self, sentence):
         states = [START, START]
         for word in sentence + (STOP, STOP):
-            scores = sorted(self.scorer.trigram_scores(states[-2:] + [word]),
-                            key=lambda v: v[1])
-            states.append(scores[-1][0])
+            scores = max(self.scorer.trigram_scores(states[-2:] + [word]),
+                         key=lambda v: v[1])
+            states.append(scores[0])
         return states[2:-2]
 
     def test(self, sentences, outfile=None):
@@ -144,7 +149,7 @@ class POSTagger(object):
             open(outfile, "w")
 
         correct, total = 0, 0
-        unk = np.array([0, 0])
+        unk, unk_total = 0, 0
         for sentence in sentences:
             words, gold = zip(*sentence)
             guess = self.decode(words)
@@ -155,10 +160,11 @@ class POSTagger(object):
                      for w, g in zip(words, guess)]
                     f.write("\n")
 
-            correct += np.sum([t1 == t2 for t1, t2 in zip(gold, guess)])
+            correct += sum([t1 == t2 for t1, t2 in zip(gold, guess)])
             total += len(words)
-            tmp = [[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
-                   if w not in self.vocab]
+            tmp = zip(*[[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
+                        if w not in self.vocab])
             if len(tmp):
-                unk += np.sum(np.array(tmp), axis=0)
-        return correct / total, unk[0] / unk[1]
+                unk += sum(tmp[0])
+                unk_total += sum(tmp[1])
+        return correct / total, unk / unk_total
