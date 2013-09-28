@@ -5,10 +5,19 @@ from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 import os
 import hw3
+import argparse
+
+parser = argparse.ArgumentParser(
+    description="Part of speech tagging.")
+parser.add_argument("-d", "--data", default="data",
+                    help="The base path for the data files.")
+parser.add_argument("-o", "--outfile", default="output.txt",
+                    help="The file where the output should be written.")
 
 
 if __name__ == "__main__":
-    data_path = "data"
+    args = parser.parse_args()
+    data_path = args.data
 
     # Load all the datasets.
     print("Loading training data")
@@ -28,7 +37,7 @@ if __name__ == "__main__":
 
     # Set up and train the local tag scorer.
     print("Training scorer")
-    scorer = hw3.FrequentTagScorer()
+    scorer = hw3.TrigramScorer()
     scorer.train(hw3.extract_all_trigrams(training_data))
     model = hw3.POSTagger(training_vocab, scorer)
 
@@ -41,4 +50,4 @@ if __name__ == "__main__":
     print("Accuracy: {0:.4f}, Unknown: {1:.4f}".format(acc*100, unk*100))
 
     print("Writing out-of-domain predictions")
-    model.test(test_data, outfile="output.txt")
+    model.test(test_data, outfile=args.outfile)

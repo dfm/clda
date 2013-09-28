@@ -11,6 +11,7 @@ from collections import defaultdict
 
 START = "<S>"
 STOP = "</S>"
+UNKNOWN = "<UNK>"
 
 
 class Counter(defaultdict):
@@ -51,7 +52,7 @@ def extract_all_trigrams(sentences):
     return [t for s in map(extract_trigrams, sentences) for t in s]
 
 
-class FrequentTagScorer(object):
+class TagScorer(object):
 
     def __init__(self):
         self.words = defaultdict(lambda: Counter(float))
@@ -75,6 +76,53 @@ class FrequentTagScorer(object):
         probs = self.words[w] if w in self.words else self.unknown
         # allowed = [t for t in probs if " ".join([ppt, pt, t]) in self.seen]
         return [(t, np.log(v)) for t, v in probs.items()]
+
+
+class TrigramScorer(object):
+
+    def __init__(self):
+        self.p_word_tag = defaultdict(lambda: Counter(float))
+        self.p_tag = Counter(float)
+        self.p_tag_ptag = defaultdict(lambda: Counter(float))
+        self.p_tag_pptag = defaultdict(lambda: Counter(float))
+
+    def train(self, trigrams):
+        self.words = set([])
+        for trigram in trigrams:
+            ppt, pt, t, w = trigram
+
+            # Unknown word model.
+            if w not in self.words:
+                self.p_word_tag[t][UNKNOWN] += 1
+
+            self.words.add(w)
+
+            # Keep track of the tag prior.
+            self.p_tag[t] += 1
+
+            # Update the conditional probabilities.
+            self.p_word_tag[t][w] += 1
+            self.p_tag_ptag[pt][t] += 1
+            self.p_tag_pptag[" ".join([ppt, pt])][t] += 1
+
+        # Normalize the distributions.
+        self.p_tag.normalize()
+        [dist.normalize() for k, dist in self.p_word_tag.items()]
+        [dist.normalize() for k, dist in self.p_tag_ptag.items()]
+        [dist.normalize() for k, dist in self.p_tag_pptag.items()]
+
+    def trigram_scores(self, trigram):
+        # Parse the trigram and deal with unknown words.
+        ppt, pt, w = trigram
+        if w not in self.words:
+            w = UNKNOWN
+
+        # Loop over possible tags and compute the scores.
+        l2, l3 = self.lambda2, self.lambda3
+        return [(t, np.log((1-l2-l3)*tag_prior + l2*self.p_tag_ptag[pt][t]
+                           + l3*self.p_tag_pptag[" ".join([ppt, pt])][t])
+                 + np.log(self.p_word_tag[t][w]))
+                for t, tag_prior in self.p_tag.items()]
 
 
 class POSTagger(object):
