@@ -39,3 +39,6 @@ if __name__ == "__main__":
     print("Testing out-of-domain performance")
     acc, unk = model.test(dev_out_data)
     print("Accuracy: {0:.4f}, Unknown: {1:.4f}".format(acc*100, unk*100))
+
+    print("Writing out-of-domain predictions")
+    model.test(test_data, outfile="output.txt")

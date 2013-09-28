@@ -91,12 +91,22 @@ class POSTagger(object):
             states.append(scores[-1][0])
         return states[2:-2]
 
-    def test(self, sentences):
+    def test(self, sentences, outfile=None):
+        if outfile is not None:
+            open(outfile, "w")
+
         correct, total = 0, 0
         unk = np.array([0, 0])
         for sentence in sentences:
             words, gold = zip(*sentence)
             guess = self.decode(words)
+
+            if outfile is not None:
+                with open(outfile, "a") as f:
+                    [f.write("{0}\t{1}\n".format(w, g))
+                     for w, g in zip(words, guess)]
+                    f.write("\n")
+
             correct += np.sum([t1 == t2 for t1, t2 in zip(gold, guess)])
             total += len(words)
             tmp = [[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
