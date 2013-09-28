@@ -131,18 +131,72 @@ class TrigramScorer(object):
                 if w in self.p_word_tag[t]]
 
 
+class State(object):
+
+    def __init__(self, ppt, pt):
+        self.ppt = ppt
+        self.pt = pt
+
+
+def _state_id(t1, t2):
+    return t1 + " " + t2
+
+
 class POSTagger(object):
 
     def __init__(self, scorer):
         self.scorer = scorer
 
-    def decode(self, sentence):
+    def greedy_decode(self, sentence):
         states = [START, START]
         for word in sentence + (STOP, STOP):
             scores = max(self.scorer.trigram_scores(states[-2:] + [word]),
                          key=lambda v: v[1])
             states.append(scores[0])
         return states[2:-2]
+
+    def decode(self, sentence):
+        states = [(START, START)]
+        delta = [{_state_id(START, START): 0.0}]
+        psi = [{}]
+        for word in sentence + (STOP, STOP):
+            # Compute the scores for all the potential steps.
+            scoresets = [self.scorer.trigram_scores(t + (word, ))
+                         for t in states]
+
+            # Transpose the scores so that we can take the argmax.
+            tmp = defaultdict(list)
+            [tmp[_state_id(state[-1], t)].append((t, state, score))
+             for state, scores in zip(states, scoresets)
+             for t, score in scores]
+
+            # Compute the max/argmax.
+            d = delta[-1]
+            tmp = zip(*[zip((s, s, s), max(v, key=lambda o: o[2]
+                                           + d[_state_id(*(o[1]))]))
+                        for s, v in tmp.items()])
+
+            # Update the delta and psi objects.
+            states = [tuple(k.split()) for k, v in tmp[0]]
+            psi.append(dict(tmp[1]))
+            delta.append(dict(tmp[2]))
+
+        # Backtrack through the graph.
+        k = max(delta[-1].items(), key=lambda o: o[1])[0]
+        z = psi[-1][k]
+        states = [k.split()[0]]
+        for d, p in zip(delta[1:-1][::-1], psi[1:-1][::-1]):
+            z = p[_state_id(*z)]
+            states.append(z[1])
+        return states[1:-1][::-1]
+
+    def score_tagging(self, words, tags):
+        tags = [START, START] + list(tags) + [STOP, STOP]
+        ninf = -float("inf")
+        return sum([dict(self.scorer.trigram_scores(tags[i:i+2]
+                                                    + [word])).get(tags[i+2],
+                                                                   ninf)
+                    for i, word in enumerate(list(words) + [STOP, STOP])])
 
     def test(self, sentences, outfile=None):
         if outfile is not None:
@@ -151,6 +205,7 @@ class POSTagger(object):
         vocab = self.scorer.words
         correct, total = 0, 0
         unk, unk_total = 0, 0
+        sub = 0
         for sentence in sentences:
             words, gold = zip(*sentence)
             guess = self.decode(words)
@@ -170,5 +225,15 @@ class POSTagger(object):
             if len(tmp):
                 unk += sum(tmp[0])
                 unk_total += sum(tmp[1])
+
+            # Check for decoding suboptimalities.
+            if outfile is None:
+                gold_score = self.score_tagging(words, gold)
+                guess_score = self.score_tagging(words, guess)
+                if gold_score > guess_score:
+                    sub += 1
+
+        if sub > 0:
+            print("Suboptimalities detected: {0}".format(sub))
 
         return correct / total, unk / unk_total
