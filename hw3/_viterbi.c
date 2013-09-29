@@ -162,6 +162,11 @@ static PyObject
                 final_state = tmp_state;
         }
     }
+    if (final_state == NULL) {
+        free_trellis(trellis);
+        free(words);
+        return NULL;
+    }
 
     PyObject *result = PyList_New(nwords - 1);
     if (result == NULL) {

@@ -13,6 +13,10 @@ parser.add_argument("-d", "--data", default="data",
                     help="The base path for the data files.")
 parser.add_argument("-o", "--outfile", default="output.txt",
                     help="The file where the output should be written.")
+parser.add_argument("--lambda2", default=0.3, type=float,
+                    help="The bigram weight.")
+parser.add_argument("--lambda3", default=0.6, type=float,
+                    help="The trigram weight.")
 
 
 if __name__ == "__main__":
@@ -36,8 +40,11 @@ if __name__ == "__main__":
 
     # Set up and train the local tag scorer.
     print("Training scorer")
-    scorer = hw3.TrigramScorer()
+    scorer = hw3.TrigramScorer(lambda2=args.lambda2, lambda3=args.lambda3)
     scorer.train(training_data)
+    print("Estimating interpolation coefficients")
+    scorer.estimate_lambdas()
+
     model = hw3.POSTagger(scorer)
 
     print("Testing in-domain performance")

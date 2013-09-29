@@ -4,8 +4,9 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["read_dataset", "TagScorer", "TrigramScorer", "POSTagger"]
+__all__ = ["read_dataset", "TrigramScorer", "POSTagger"]
 
+import random
 from math import log
 from collections import defaultdict
 
@@ -54,33 +55,6 @@ def extract_all_trigrams(sentences):
     return [t for s in map(extract_trigrams, sentences) for t in s]
 
 
-class TagScorer(object):
-
-    def __init__(self):
-        self.words = defaultdict(lambda: Counter(float))
-        self.unknown = Counter(float)
-
-    def train(self, sentences):
-        trigrams = extract_all_trigrams(sentences)
-        self.seen = []
-        for trigram in trigrams:
-            ppt, pt, t, w = trigram
-            if w not in self.words:
-                self.unknown[t] += 1
-            self.words[w][t] += 1
-            self.seen.append(" ".join([ppt, pt, t]))
-
-        self.seen = set(self.seen)
-        [w.normalize() for k, w in self.words.items()]
-        self.unknown.normalize()
-
-    def trigram_scores(self, trigram):
-        ppt, pt, w = trigram
-        probs = self.words[w] if w in self.words else self.unknown
-        # allowed = [t for t in probs if " ".join([ppt, pt, t]) in self.seen]
-        return [(t, log(v)) for t, v in probs.items()]
-
-
 class TrigramScorer(object):
 
     def __init__(self, lambda2=0.3, lambda3=0.6):
@@ -91,11 +65,50 @@ class TrigramScorer(object):
         self.p_tag_ptag = defaultdict(lambda: Counter(float))
         self.p_tag_pptag = defaultdict(lambda: Counter(float))
 
+        self.trigram_count = 0
+        self.unigram_counts = defaultdict(int)
+        self.bigram_counts = defaultdict(int)
+        self.trigram_counts = defaultdict(int)
+
+    def estimate_lambdas(self):
+        l = [0, 0, 0]
+
+        trigrams = self.trigram_counts.keys()
+        random.shuffle(trigrams)
+
+        c1, c2, c3 = [], [], []
+        for tg in trigrams:
+            t1, t2, t3 = tg.split()
+            bg1 = self.bigram_counts[" ".join([t1, t2])] - 1
+            c1.append(((self.trigram_counts[tg] - 1) / bg1)
+                      if bg1 > 0 else 0)
+
+            ug1 = self.unigram_counts[t2] - 1
+            c2.append(((self.bigram_counts[" ".join([t2, t3])]-1) / ug1)
+                      if ug1 > 0 else 0)
+
+            c3.append((self.unigram_counts[t3]-1)/(self.trigram_count-1))
+
+        for tg, cases in zip(trigrams, zip(c1, c2, c3)):
+            count = self.trigram_counts[tg]
+            l[max(enumerate(cases), key=lambda o: o[1])[0]] += count
+
+        norm = sum(l)
+        self.lambda2 = l[1] / norm
+        self.lambda3 = l[0] / norm
+        print("Estimated lambda_2 = {0}".format(self.lambda2))
+        print("Estimated lambda_3 = {0}".format(self.lambda3))
+
     def train(self, sentences):
         trigrams = extract_all_trigrams(sentences)
         self.words = set([])
         for trigram in trigrams:
             ppt, pt, t, w = trigram
+
+            self.trigram_count += 1
+            self.unigram_counts[t] += 1
+            self.bigram_counts[" ".join([pt, t])] += 1
+            self.trigram_counts[" ".join([ppt, pt, t])] += 1
 
             # Unknown word model.
             if w not in self.words:
@@ -118,19 +131,9 @@ class TrigramScorer(object):
         [dist.normalize() for k, dist in self.p_tag_pptag.items()]
 
     def trigram_scores(self, trigram):
-        # Parse the trigram and deal with unknown words.
-        ppt, pt, w = trigram
-        if w not in self.words:
-            w = UNKNOWN
-
-        # Loop over possible tags and compute the scores.
-        l2, l3 = self.lambda2, self.lambda3
-        p2 = self.p_tag_ptag[pt]
-        p3 = self.p_tag_pptag[" ".join([ppt, pt])]
-        return [(t, log((1-l2-l3)*tag_prior + l2*p2[t] + l3*p3[t])
-                 + log(self.p_word_tag[t][w]))
-                for t, tag_prior in self.p_tag.items()
-                if w in self.p_word_tag[t]]
+        tags = self.p_tag.keys()
+        scores = self.trigram_scores_list(trigram, tags)
+        return [(t, s) for t, s in zip(tags, scores) if s is not None]
 
     def trigram_scores_list(self, trigram, tags):
         # Parse the trigram and deal with unknown words.
@@ -225,10 +228,6 @@ class POSTagger(object):
                 guess_score = self.score_tagging(words, guess)
                 if gold_score > guess_score:
                     sub += 1
-                    print(gold)
-                    print(guess)
-                    print(words)
-                    print(gold_score, guess_score)
 
         if sub > 0:
             print("Suboptimalities detected: {0}".format(sub))
