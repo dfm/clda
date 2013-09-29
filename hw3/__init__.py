@@ -9,6 +9,8 @@ __all__ = ["read_dataset", "TagScorer", "TrigramScorer", "POSTagger"]
 from math import log
 from collections import defaultdict
 
+from ._viterbi import viterbi
+
 START = "<S>"
 STOP = "</S>"
 UNKNOWN = "<UNK>"
@@ -146,6 +148,7 @@ class POSTagger(object):
 
     def __init__(self, scorer):
         self.scorer = scorer
+        self.tags = [START] + self.scorer.p_tag.keys()
 
     def greedy_decode(self, sentence):
         states = [START, START]
@@ -155,40 +158,17 @@ class POSTagger(object):
             states.append(scores[0])
         return states[2:-2]
 
+    def _score_func(self, ind1, ind2, word):
+        ppt, pt = self.tags[ind1], self.tags[ind2]
+        scores = self.scorer.trigram_scores([ppt, pt, word])
+        result = [None for i in range(len(self.tags))]
+        [result.__setitem__(self.tags.index(k), v) for k, v in scores]
+        return result
+
     def decode(self, sentence):
-        states = [(START, START)]
-        delta = [{_state_id(START, START): 0.0}]
-        psi = [{}]
-        for word in sentence + (STOP, STOP):
-            # Compute the scores for all the potential steps.
-            scoresets = [self.scorer.trigram_scores(t + (word, ))
-                         for t in states]
-
-            # Transpose the scores so that we can take the argmax.
-            tmp = defaultdict(list)
-            [tmp[_state_id(state[-1], t)].append((t, state, score))
-             for state, scores in zip(states, scoresets)
-             for t, score in scores]
-
-            # Compute the max/argmax.
-            d = delta[-1]
-            tmp = zip(*[zip((s, s, s), max(v, key=lambda o: o[2]
-                                           + d[_state_id(*(o[1]))]))
-                        for s, v in tmp.items()])
-
-            # Update the delta and psi objects.
-            states = [tuple(k.split()) for k, v in tmp[0]]
-            psi.append(dict(tmp[1]))
-            delta.append(dict(tmp[2]))
-
-        # Backtrack through the graph.
-        k = max(delta[-1].items(), key=lambda o: o[1])[0]
-        z = psi[-1][k]
-        states = [k.split()[0]]
-        for d, p in zip(delta[1:-1][::-1], psi[1:-1][::-1]):
-            z = p[_state_id(*z)]
-            states.append(z[1])
-        return states[1:-1][::-1]
+        tags = viterbi(len(self.tags), list(sentence) + [STOP, STOP],
+                       self._score_func)
+        return [self.tags[i] for i in tags[1:]]
 
     def score_tagging(self, words, tags):
         tags = [START, START] + list(tags) + [STOP, STOP]
