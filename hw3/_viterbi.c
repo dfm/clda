@@ -81,7 +81,7 @@ void free_trellis (Trellis *self)
     free(self);
 }
 
-void evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
+int evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
 {
     int k, ntags = trellis->ntags;
     PyObject *scores = PyObject_CallFunction(scorer, "iiO",
@@ -90,7 +90,7 @@ void evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
 
     if (scores == NULL) {
         Py_XDECREF(scores);
-        return;
+        return 1;
     }
 
     // Loop over the computed scores and update the deltas.
@@ -98,7 +98,7 @@ void evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
         PyObject *score_obj = PyList_GetItem(scores, k);
         if (score_obj == NULL) {
             Py_DECREF(scores);
-            return;
+            return 1;
         }
 
         if (score_obj != Py_None) {
@@ -106,7 +106,7 @@ void evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
             State *next_state = get_state(trellis, state->ind+1,
                                           state->tag, k);
 
-            if (!next_state->active || score > next_state->delta) {
+            if (!next_state->active || score >= next_state->delta) {
                 next_state->active = 1;
                 next_state->delta = score;
                 next_state->psi = state;
@@ -115,6 +115,7 @@ void evaluate_state (Trellis *trellis, State *state, PyObject *scorer)
     }
 
     Py_DECREF(scores);
+    return 0;
 }
 
 static PyObject
@@ -141,16 +142,24 @@ static PyObject
             for (j = 0; j < ntags; ++j) {
                 // Get the current state and if it's active compute the scores.
                 State *state = get_state(trellis, word, i, j);
-                if (state->active) evaluate_state (trellis, state, scorer);
+                if (state->active)
+                    if (evaluate_state (trellis, state, scorer)) {
+                        free_trellis(trellis);
+                        free(words);
+                        return NULL;
+                    };
             }
 
     // Find the final state.
-    State *final_state;
+    State *final_state = NULL, *tmp_state;
     int cont = 1;
     for (i = 0; i < ntags && cont; ++i) {
         for (j = 0; j < ntags && cont; ++j) {
-            final_state = get_state(trellis, nwords-1, i, j);
-            if (final_state->active) cont = 0;
+            tmp_state = get_state(trellis, nwords-1, i, j);
+            if (tmp_state->active &&
+                    (final_state == NULL ||
+                     tmp_state->delta > final_state->delta))
+                final_state = tmp_state;
         }
     }
 

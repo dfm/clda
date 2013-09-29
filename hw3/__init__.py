@@ -132,6 +132,22 @@ class TrigramScorer(object):
                 for t, tag_prior in self.p_tag.items()
                 if w in self.p_word_tag[t]]
 
+    def trigram_scores_list(self, trigram, tags):
+        # Parse the trigram and deal with unknown words.
+        ppt, pt, w = trigram
+        if w not in self.words:
+            w = UNKNOWN
+
+        # Loop over possible tags and compute the scores.
+        l2, l3 = self.lambda2, self.lambda3
+        p1 = self.p_tag
+        p2 = self.p_tag_ptag[pt]
+        p3 = self.p_tag_pptag[" ".join([ppt, pt])]
+        return [log((1-l2-l3)*p1[t] + l2*p2[t] + l3*p3[t])
+                + log(self.p_word_tag[t][w])
+                if w in self.p_word_tag[t] else None
+                for t in tags]
+
 
 class State(object):
 
@@ -160,10 +176,7 @@ class POSTagger(object):
 
     def _score_func(self, ind1, ind2, word):
         ppt, pt = self.tags[ind1], self.tags[ind2]
-        scores = self.scorer.trigram_scores([ppt, pt, word])
-        result = [None for i in range(len(self.tags))]
-        [result.__setitem__(self.tags.index(k), v) for k, v in scores]
-        return result
+        return self.scorer.trigram_scores_list([ppt, pt, word], self.tags)
 
     def decode(self, sentence):
         tags = viterbi(len(self.tags), list(sentence) + [STOP, STOP],
@@ -212,6 +225,10 @@ class POSTagger(object):
                 guess_score = self.score_tagging(words, guess)
                 if gold_score > guess_score:
                     sub += 1
+                    print(gold)
+                    print(guess)
+                    print(words)
+                    print(gold_score, guess_score)
 
         if sub > 0:
             print("Suboptimalities detected: {0}".format(sub))
