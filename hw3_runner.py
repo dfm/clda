@@ -6,6 +6,8 @@ from __future__ import (division, print_function, absolute_import,
 import os
 import hw3
 import argparse
+from hw3.maxent import (SuffixExtractor, NCharactersExtractor,
+                        NDigitsExtractor, CapitalExtractor)
 
 parser = argparse.ArgumentParser(
     description="Part of speech tagging.")
@@ -43,8 +45,15 @@ if __name__ == "__main__":
 
     # Set up and train the local tag scorer.
     print("Training scorer")
+    extractors = [
+        SuffixExtractor(2),
+        NCharactersExtractor(5),
+        NDigitsExtractor(5),
+        CapitalExtractor(),
+    ]
     scorer = hw3.TrigramScorer(lambda2=args.lambda2, lambda3=args.lambda3)
-    scorer.train(training_data)
+    scorer.train(training_data, extractors, load_weights="weights.txt",
+                 save_weights="weights.out")
     if args.estimate:
         print("Estimating interpolation coefficients")
         scorer.estimate_lambdas()

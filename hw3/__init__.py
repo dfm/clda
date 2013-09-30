@@ -7,6 +7,7 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = ["read_dataset", "TrigramScorer", "POSTagger"]
 
 import random
+import numpy as np
 from math import log
 from collections import defaultdict
 
@@ -99,9 +100,14 @@ class TrigramScorer(object):
         print("Estimated lambda_2 = {0}".format(self.lambda2))
         print("Estimated lambda_3 = {0}".format(self.lambda3))
 
-    def train(self, sentences):
+    def feature_vector(self, word):
+        return np.concatenate([e((None, word)) for e in self.extractors])
+
+    def train(self, sentences, extractors, threshold=10,
+              load_weights=None, save_weights=None):
         trigrams = extract_all_trigrams(sentences)
         self.words = set([])
+        word_counts = defaultdict(int)
         for trigram in trigrams:
             ppt, pt, t, w = trigram
 
@@ -115,6 +121,7 @@ class TrigramScorer(object):
                 self.p_word_tag[t][UNKNOWN] += 1
 
             self.words.add(w)
+            word_counts[w] += 1
 
             # Keep track of the tag prior.
             self.p_tag[t] += 1
@@ -130,6 +137,36 @@ class TrigramScorer(object):
         [dist.normalize() for k, dist in self.p_tag_ptag.items()]
         [dist.normalize() for k, dist in self.p_tag_pptag.items()]
 
+        # Build the unknown word model using the uncommon words.
+        rare_words = set([w for w, c in word_counts.items() if c <= threshold])
+        training_data = [(t, w) for sentence in sentences
+                         for w, t in sentence if w in rare_words]
+        print("Training unknown word classifier with {0} examples"
+              .format(len(training_data)))
+
+        self.extractors = extractors
+        [e.setup(training_data) for e in extractors]
+        nfeatures = sum([e.nfeatures for e in extractors])
+
+        self.p_features = defaultdict(lambda: np.zeros(nfeatures))
+        for t, w in training_data:
+            self.p_features[t] += self.feature_vector(w)
+        for k, p in self.p_features.items():
+            self.p_features[k] /= np.sum(p)
+
+        # print("Training unknown word classifier with {0} examples"
+        #       .format(len(training_data)))
+        # self.classifier = MaximumEntropyClassifier(self.p_tag.keys(),
+        #                                            extractors)
+        # if load_weights is not None:
+        #     self.classifier.vector = np.loadtxt(load_weights)
+        # print("There are {0} features and {1} classes"
+        #       .format(sum([e.nfeatures for e in extractors]),
+        #               len(self.classifier.classes)))
+        # self.classifier.train(training_data, 40)
+        # if save_weights is not None:
+        #     np.savetxt(save_weights, self.classifier.vector)
+
     def trigram_scores(self, trigram):
         tags = self.p_tag.keys()
         scores = self.trigram_scores_list(trigram, tags)
@@ -139,17 +176,32 @@ class TrigramScorer(object):
         # Parse the trigram and deal with unknown words.
         ppt, pt, w = trigram
         if w not in self.words:
-            w = UNKNOWN
+            f = np.array(self.feature_vector(w), dtype=bool)
+            word_prob = [np.sum(np.log(self.p_features[t][f]))
+                         if (t in self.p_features
+                             and np.all(self.p_features[t][f] > 0)) else None
+                         for t in tags]
+
+            # Fall back on the shitty unknown word model.
+            if all([p is None for p in word_prob]):
+                w = UNKNOWN
+                word_prob = [log(self.p_word_tag[t][w])
+                             if w in self.p_word_tag[t] else None
+                             for t in tags]
+
+        else:
+            word_prob = [log(self.p_word_tag[t][w])
+                         if w in self.p_word_tag[t] else None
+                         for t in tags]
 
         # Loop over possible tags and compute the scores.
         l2, l3 = self.lambda2, self.lambda3
         p1 = self.p_tag
         p2 = self.p_tag_ptag[pt]
         p3 = self.p_tag_pptag[" ".join([ppt, pt])]
-        return [log((1-l2-l3)*p1[t] + l2*p2[t] + l3*p3[t])
-                + log(self.p_word_tag[t][w])
-                if w in self.p_word_tag[t] else None
-                for t in tags]
+        return [log((1-l2-l3)*p1[t] + l2*p2[t] + l3*p3[t]) + wp
+                if wp is not None else None
+                for t, wp in zip(tags, word_prob)]
 
 
 class State(object):
