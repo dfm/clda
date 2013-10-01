@@ -4,10 +4,10 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["read_dataset", "TrigramScorer", "POSTagger"]
+__all__ = ["read_dataset", "TrigramScorer", "UnknownWordModel", "POSTagger"]
 
+import re
 import random
-import numpy as np
 from math import log
 from collections import defaultdict
 
@@ -58,7 +58,9 @@ def extract_all_trigrams(sentences):
 
 class TrigramScorer(object):
 
-    def __init__(self, lambda2=0.3, lambda3=0.6):
+    def __init__(self, unknown, lambda2=0.3, lambda3=0.6):
+        self.unknown = unknown
+
         self.lambda2 = lambda2
         self.lambda3 = lambda3
         self.p_word_tag = defaultdict(lambda: Counter(float))
@@ -100,11 +102,7 @@ class TrigramScorer(object):
         print("Estimated lambda_2 = {0}".format(self.lambda2))
         print("Estimated lambda_3 = {0}".format(self.lambda3))
 
-    def feature_vector(self, word):
-        return np.concatenate([e((None, word)) for e in self.extractors])
-
-    def train(self, sentences, extractors, threshold=10,
-              load_weights=None, save_weights=None):
+    def train(self, sentences, threshold=10):
         trigrams = extract_all_trigrams(sentences)
         self.words = set([])
         word_counts = defaultdict(int)
@@ -115,10 +113,6 @@ class TrigramScorer(object):
             self.unigram_counts[t] += 1
             self.bigram_counts[" ".join([pt, t])] += 1
             self.trigram_counts[" ".join([ppt, pt, t])] += 1
-
-            # Unknown word model.
-            if w not in self.words:
-                self.p_word_tag[t][UNKNOWN] += 1
 
             self.words.add(w)
             word_counts[w] += 1
@@ -139,33 +133,11 @@ class TrigramScorer(object):
 
         # Build the unknown word model using the uncommon words.
         rare_words = set([w for w, c in word_counts.items() if c <= threshold])
-        training_data = [(t, w) for sentence in sentences
+        training_data = [(w, t) for sentence in sentences
                          for w, t in sentence if w in rare_words]
         print("Training unknown word classifier with {0} examples"
               .format(len(training_data)))
-
-        self.extractors = extractors
-        [e.setup(training_data) for e in extractors]
-        nfeatures = sum([e.nfeatures for e in extractors])
-
-        self.p_features = defaultdict(lambda: np.zeros(nfeatures))
-        for t, w in training_data:
-            self.p_features[t] += self.feature_vector(w)
-        for k, p in self.p_features.items():
-            self.p_features[k] /= np.sum(p)
-
-        # print("Training unknown word classifier with {0} examples"
-        #       .format(len(training_data)))
-        # self.classifier = MaximumEntropyClassifier(self.p_tag.keys(),
-        #                                            extractors)
-        # if load_weights is not None:
-        #     self.classifier.vector = np.loadtxt(load_weights)
-        # print("There are {0} features and {1} classes"
-        #       .format(sum([e.nfeatures for e in extractors]),
-        #               len(self.classifier.classes)))
-        # self.classifier.train(training_data, 40)
-        # if save_weights is not None:
-        #     np.savetxt(save_weights, self.classifier.vector)
+        self.unknown.train(training_data)
 
     def trigram_scores(self, trigram):
         tags = self.p_tag.keys()
@@ -176,18 +148,7 @@ class TrigramScorer(object):
         # Parse the trigram and deal with unknown words.
         ppt, pt, w = trigram
         if w not in self.words:
-            f = np.array(self.feature_vector(w), dtype=bool)
-            word_prob = [np.sum(np.log(self.p_features[t][f]))
-                         if (t in self.p_features
-                             and np.all(self.p_features[t][f] > 0)) else None
-                         for t in tags]
-
-            # Fall back on the shitty unknown word model.
-            if all([p is None for p in word_prob]):
-                w = UNKNOWN
-                word_prob = [log(self.p_word_tag[t][w])
-                             if w in self.p_word_tag[t] else None
-                             for t in tags]
+            word_prob = self.unknown.get_log_probs(tags, w)
 
         else:
             word_prob = [log(self.p_word_tag[t][w])
@@ -204,15 +165,60 @@ class TrigramScorer(object):
                 for t, wp in zip(tags, word_prob)]
 
 
-class State(object):
+class UnknownWordModel(object):
 
-    def __init__(self, ppt, pt):
-        self.ppt = ppt
-        self.pt = pt
+    _re = re.compile("[0-9]")
 
+    def __init__(self, maxn=5, lambda1=0.1, lambda2=0.3, lambda3=0.5):
+        self.lambda1 = lambda1
+        self.lambda2 = lambda2
+        self.lambda3 = lambda3
 
-def _state_id(t1, t2):
-    return t1 + " " + t2
+        self.p0 = Counter(float)
+        self.p1 = defaultdict(lambda: Counter(float))
+        self.p2 = defaultdict(lambda: Counter(float))
+        self.p3 = defaultdict(lambda: Counter(float))
+
+        self.pc = defaultdict(float)
+
+        self.maxn = maxn
+        self.pn = defaultdict(lambda: [0 for n in range(maxn)])
+
+    def train(self, data):
+        # Build up the empirical probabilities.
+        for w, t in data:
+            self.p0[t] += 1
+            self.p1[t][w[-1]] += 1
+            self.p2[t][w[-2:]] += 1
+            self.p3[t][w[-3:]] += 1
+            if w[0].lower() != w[0]:
+                self.pc[t] += 1
+            n = min([len(self._re.findall(w)), self.maxn-1])
+            self.pn[t][n] += 1
+
+        # Normalize the distributions.
+        self.p0.normalize()
+        [p.normalize() for t, p in self.p1.items()]
+        [p.normalize() for t, p in self.p2.items()]
+        [p.normalize() for t, p in self.p3.items()]
+        for t in self.p0.keys():
+            self.pc[t] = max([self.pc[t], 1.0]) / len(data)
+        for t, p in self.pn.items():
+            norm = sum([v+1 for v in p])
+            self.pn[t] = [(v + 1) / norm for v in p]
+
+    def get_log_probs(self, tags, word):
+        l1, l2, l3 = self.lambda1, self.lambda2, self.lambda3
+        l0 = 1.0 - l1 - l2 - l3
+        s1, s2, s3 = word[-1], word[-2:], word[-3:]
+        n = min([len(self._re.findall(word)), self.maxn-1])
+        cap = word[0].lower() != word[0]
+        return [log(l0*self.p0[t] + l1*self.p1[t][s1] + l2*self.p2[t][s2] +
+                    l3*self.p3[t][s3])
+                + log(self.pn[t][n])
+                + log(self.pc[t] if cap else 1-self.pc[t])
+                if self.pn[t][n] > 0 else None
+                for t in tags]
 
 
 class POSTagger(object):

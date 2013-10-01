@@ -45,15 +45,9 @@ if __name__ == "__main__":
 
     # Set up and train the local tag scorer.
     print("Training scorer")
-    extractors = [
-        SuffixExtractor(2),
-        NCharactersExtractor(5),
-        NDigitsExtractor(5),
-        CapitalExtractor(),
-    ]
-    scorer = hw3.TrigramScorer(lambda2=args.lambda2, lambda3=args.lambda3)
-    scorer.train(training_data, extractors, load_weights="weights.txt",
-                 save_weights="weights.out")
+    unk = hw3.UnknownWordModel()
+    scorer = hw3.TrigramScorer(unk, lambda2=args.lambda2, lambda3=args.lambda3)
+    scorer.train(training_data)
     if args.estimate:
         print("Estimating interpolation coefficients")
         scorer.estimate_lambdas()
