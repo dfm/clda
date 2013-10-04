@@ -6,8 +6,6 @@ from __future__ import (division, print_function, absolute_import,
 import os
 import hw3
 import argparse
-from hw3.maxent import (SuffixExtractor, NCharactersExtractor,
-                        NDigitsExtractor, CapitalExtractor)
 
 parser = argparse.ArgumentParser(
     description="Part of speech tagging.")
@@ -15,13 +13,20 @@ parser.add_argument("-d", "--data", default="data",
                     help="The base path for the data files.")
 parser.add_argument("-o", "--outfile", default="output.txt",
                     help="The file where the output should be written.")
+parser.add_argument("--greedy", action="store_true",
+                    help="Use greedy decoder instead of Viterbi.")
 parser.add_argument("--estimate", action="store_true",
                     help="Estimate the interpolation coefficients from "
                     "the training data?")
+parser.add_argument("--stupid", action="store_true",
+                    help="Use a stupid unknown word model.")
 parser.add_argument("--lambda2", default=0.3, type=float,
-                    help="The bigram weight.")
+                    help="The bigram weight in the emission model.")
 parser.add_argument("--lambda3", default=0.6, type=float,
-                    help="The trigram weight.")
+                    help="The trigram weight in the emission model.")
+parser.add_argument("--thresh", default=10, type=float,
+                    help="Threshold for maximum number of times a word is "
+                    "observed in the training data to count as unknown.")
 
 
 if __name__ == "__main__":
@@ -43,16 +48,21 @@ if __name__ == "__main__":
     print("Loading out-of-domain test data")
     test_data = hw3.read_dataset(os.path.join(data_path, "en-web-test.blind"))
 
+    # Choose the unknown word model.
+    if args.stupid:
+        unk = hw3.StupidUnknownWordModel()
+    else:
+        unk = hw3.UnknownWordModel()
+
     # Set up and train the local tag scorer.
     print("Training scorer")
-    unk = hw3.UnknownWordModel()
     scorer = hw3.TrigramScorer(unk, lambda2=args.lambda2, lambda3=args.lambda3)
-    scorer.train(training_data)
+    scorer.train(training_data, threshold=args.thresh)
     if args.estimate:
         print("Estimating interpolation coefficients")
         scorer.estimate_lambdas()
 
-    model = hw3.POSTagger(scorer)
+    model = hw3.POSTagger(scorer, greedy=args.greedy)
 
     print("Testing in-domain performance")
     acc, unk = model.test(dev_in_data)

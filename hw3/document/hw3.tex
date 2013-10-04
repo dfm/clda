@@ -1,0 +1,73 @@
+\documentclass[11pt]{article}
+\usepackage{fullpage}
+\usepackage{fancyhdr}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{url}
+
+\usepackage{listings}
+\usepackage{color}
+\lstset{language=Python,
+        basicstyle=\footnotesize\ttfamily,
+        showspaces=false,
+        showstringspaces=false,
+        tabsize=2,
+        breaklines=false,
+        breakatwhitespace=true,
+        identifierstyle=\ttfamily,
+        keywordstyle=\color[rgb]{0,0,1},
+        commentstyle=\color[rgb]{0.133,0.545,0.133},
+        stringstyle=\color[rgb]{0.627,0.126,0.941},
+    }
+
+\usepackage[pdftex]{graphicx}
+
+% header
+\fancyhead{}
+\fancyfoot{}
+\fancyfoot[C]{\thepage}
+\fancyhead[R]{Daniel Foreman-Mackey}
+\fancyhead[L]{Statistical Natural Language Processing --- Homework 3}
+\pagestyle{fancy}
+\setlength{\headsep}{10pt}
+\setlength{\headheight}{20pt}
+
+% shortcuts
+\newcommand{\Eq}[1]{Equation (\ref{eq:#1})}
+\newcommand{\eq}[1]{Equation (\ref{eq:#1})}
+\newcommand{\eqlabel}[1]{\label{eq:#1}}
+\newcommand{\Fig}[1]{Figure~\ref{fig:#1}}
+\newcommand{\fig}[1]{Figure~\ref{fig:#1}}
+\newcommand{\figlabel}[1]{\label{fig:#1}}
+
+\newcommand{\pr}[1]{\ensuremath{p\left (#1 \right )}}
+\newcommand{\lk}[1]{\ensuremath{\mathcal{L} \left ( #1 \right )}}
+\newcommand{\bvec}[1]{\ensuremath{\boldsymbol{#1}}}
+\newcommand{\dd}{\ensuremath{\, \mathrm{d}}}
+\newcommand{\normal}[2]{\ensuremath{\mathcal{N} \left ( #1; #2 \right ) }}
+\newcommand{\T}{^\mathrm{T}}
+
+\newcommand{\data}{\mathcal{D}}
+\newcommand{\code}[1]{{\sffamily #1}}
+
+
+\begin{document}
+
+As with the last assignment, I decided to implement my homework in Python
+instead of using the provided Java code.
+I was surprised to find that the language modeling implemented in pure-Python
+was very computationally efficient.
+This is because the data structures in the standard library are pretty
+impressive!
+I also started implementing a version that looked a bit more like the provided
+code (using a lot of objects) and that was painfully slow.
+I wasn't able to make the Viterbi algorithm bearable in pure-Python so I
+dropped down to C for that part (but I still evaluate the trigram/emission
+model using Python).
+All of the code that I used for this assignment is available on GitHub:
+\url{https://github.com/dfm/nlp}.
+
+
+
+\end{document}

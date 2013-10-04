@@ -4,7 +4,8 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["read_dataset", "TrigramScorer", "UnknownWordModel", "POSTagger"]
+__all__ = ["read_dataset", "TrigramScorer", "StupidUnknownWordModel",
+           "UnknownWordModel", "POSTagger"]
 
 import re
 import random
@@ -165,6 +166,20 @@ class TrigramScorer(object):
                 for t, wp in zip(tags, word_prob)]
 
 
+class StupidUnknownWordModel(object):
+
+    def __init__(self):
+        self.p0 = Counter(float)
+
+    def train(self, data):
+        for w, t in data:
+            self.p0[t] += 1
+        self.p0.normalize()
+
+    def get_log_probs(self, tags, word):
+        return [log(self.p0[t]) if t in self.p0 else None for t in tags]
+
+
 class UnknownWordModel(object):
 
     _re = re.compile("[0-9]")
@@ -223,26 +238,31 @@ class UnknownWordModel(object):
 
 class POSTagger(object):
 
-    def __init__(self, scorer):
+    def __init__(self, scorer, greedy=False):
         self.scorer = scorer
         self.tags = [START] + self.scorer.p_tag.keys()
+        if greedy:
+            self.decode = self.greedy_decode
+        else:
+            self.decode = self.viterbi_decode
 
     def greedy_decode(self, sentence):
-        states = [START, START]
+        states = [self.tags.index(START), self.tags.index(START)]
         for word in sentence + (STOP, STOP):
-            scores = max(self.scorer.trigram_scores(states[-2:] + [word]),
+            scores = max(zip(self.tags,
+                             self._score_func(*(states[-2:] + [word]))),
                          key=lambda v: v[1])
-            states.append(scores[0])
-        return states[2:-2]
+            states.append(self.tags.index(scores[0]))
+        return [self.tags[i] for i in states[2:-2]]
+
+    def viterbi_decode(self, sentence):
+        tags = viterbi(len(self.tags), list(sentence) + [STOP, STOP],
+                       self._score_func)
+        return [self.tags[i] for i in tags[1:]]
 
     def _score_func(self, ind1, ind2, word):
         ppt, pt = self.tags[ind1], self.tags[ind2]
         return self.scorer.trigram_scores_list([ppt, pt, word], self.tags)
-
-    def decode(self, sentence):
-        tags = viterbi(len(self.tags), list(sentence) + [STOP, STOP],
-                       self._score_func)
-        return [self.tags[i] for i in tags[1:]]
 
     def score_tagging(self, words, tags):
         tags = [START, START] + list(tags) + [STOP, STOP]
@@ -252,7 +272,7 @@ class POSTagger(object):
                                                                    ninf)
                     for i, word in enumerate(list(words) + [STOP, STOP])])
 
-    def test(self, sentences, outfile=None):
+    def test(self, sentences, check_sub=False, outfile=None):
         if outfile is not None:
             open(outfile, "w")
 
@@ -281,7 +301,7 @@ class POSTagger(object):
                 unk_total += sum(tmp[1])
 
             # Check for decoding suboptimalities.
-            if outfile is None:
+            if check_sub and outfile is None:
                 gold_score = self.score_tagging(words, gold)
                 guess_score = self.score_tagging(words, guess)
                 if gold_score > guess_score:
