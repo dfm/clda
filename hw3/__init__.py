@@ -184,10 +184,10 @@ class UnknownWordModel(object):
 
     _re = re.compile("[0-9]")
 
-    def __init__(self, maxn=2, lambda1=0.1, lambda2=0.3, lambda3=0.5):
-        self.lambda1 = lambda1
-        self.lambda2 = lambda2
-        self.lambda3 = lambda3
+    def __init__(self, maxn=2, theta1=0.1, theta2=0.3, theta3=0.5):
+        self.lambda1 = theta1
+        self.lambda2 = theta2
+        self.lambda3 = theta3
 
         self.p0 = Counter(float)
         self.p1 = defaultdict(lambda: Counter(float))

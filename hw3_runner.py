@@ -27,6 +27,12 @@ parser.add_argument("--lambda3", default=0.6, type=float,
 parser.add_argument("--thresh", default=10, type=float,
                     help="Threshold for maximum number of times a word is "
                     "observed in the training data to count as unknown.")
+parser.add_argument("--theta1", default=0.1, type=float,
+                    help="The unigram weight in the suffix model.")
+parser.add_argument("--theta2", default=0.3, type=float,
+                    help="The bigram weight in the suffix model.")
+parser.add_argument("--theta3", default=0.5, type=float,
+                    help="The trigram weight in the suffix model.")
 
 
 if __name__ == "__main__":
@@ -52,7 +58,9 @@ if __name__ == "__main__":
     if args.stupid:
         unk = hw3.StupidUnknownWordModel()
     else:
-        unk = hw3.UnknownWordModel()
+        unk = hw3.UnknownWordModel(theta1=args.theta1,
+                                   theta2=args.theta2,
+                                   theta3=args.theta3)
 
     # Set up and train the local tag scorer.
     print("Training scorer")
