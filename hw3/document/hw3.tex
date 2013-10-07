@@ -285,10 +285,20 @@ probability should never be exactly zero.
 This is necessary because the features are not a perfect set of summary
 statistics and in practice some validation examples end up getting zero
 probability for \emph{every tag sequence}.
-This makes inference impossible and it is clearly an artificial effect.
+This would make inference impossible and it is clearly an artificial effect
+since we are explicitly discussing \emph{unknown words}.
 
 \paragraph{Rejected features}
-Punctuation. Letters vs.\ digits.
+I considered various other features that I ended up rejecting because they
+made no effect on the validation performance (or sometimes even made the
+results worse).
+One feature that I considered was the existence of \emph{punctuation} in the
+word.
+My expectation was that unrecognized punctuation would be better classified by
+including this feature.
+Instead, most punctuation errors seem to be related to differences between the
+``gold'' tag rules of the in-domain and out-of-domain datasets.
+I'll discuss this fact in more depth below.
 
 \section{Inference}
 
@@ -327,7 +337,41 @@ application---but I didn't implement it this time---would be to prune the tree
 with some relative probability threshold at each step.
 In other words, exclude any tags that give a probability less than some
 $\theta < 1$ times the maximum probability at that step.
-This would be similar to a beam search algorithm but
+This would be similar to a beam search algorithm but I expect that it would be
+more reliable because at uncertain steps---where each possible branch has
+close to the same probability---many of the branches would be thrown away by a
+beam search whereas this pruned Viterbi method would keep more possibilities
+open.
+
+\section{Results}
+
+In the previous section, I developed 4 different ``models'' for the
+part-of-speech tagging problem:
+\begin{enumerate}
+\item{{\bf Baseline}: a context independent scorer using the greedy
+      decoder,}
+\item{{\bf Trigram}: a trigram scorer using the greedy decoder,}
+\item{{\bf Viterbi}: the same trigram scorer using the exact Viterbi decoder,
+      and}
+\item{{\bf Unknown}: the same trigram scorer with a better model of unknown
+      words using the Viterbi decoder.}
+\end{enumerate}
+The \emph{Baseline} model has one free parameter: the threshold count for
+estimating the unknown word distribution.
+The \emph{Trigram} and \emph{Viterbi} models have 2 extra parameters: the
+$\lambda$ interpolation coefficients used by the trigram scorer.
+My specific formulation of the \emph{Unknown} model adds 3 more parameters:
+the $\theta$s controlling the interpolation in the suffix model.
+Here, I will discuss the effects of each of these parameters on the in-domain
+and out-of-domain validation sets.
+In general, I found that the performance of all of my methods was
+substantially ($\lesssim 2\%$) worse on the test data than on the
+out-of-domain validation set but I was still able to achieve competitive
+performance on all of the non-training data.
+
+\subsection{The \emph{Baseline} model}
+
+\section{Discussion}
 
 \begin{thebibliography}{}\raggedright
 
