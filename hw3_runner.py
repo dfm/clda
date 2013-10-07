@@ -72,9 +72,9 @@ if __name__ == "__main__":
 
     model = hw3.POSTagger(scorer, greedy=args.greedy)
 
-    print("Testing in-domain performance")
-    acc, unk = model.test(dev_in_data)
-    print("Accuracy: {0:.4f}, Unknown: {1:.4f}".format(acc*100, unk*100))
+    # print("Testing in-domain performance")
+    # acc, unk = model.test(dev_in_data)
+    # print("Accuracy: {0:.4f}, Unknown: {1:.4f}".format(acc*100, unk*100))
 
     print("Testing out-of-domain performance")
     acc, unk = model.test(dev_out_data)

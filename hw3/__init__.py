@@ -293,6 +293,10 @@ class POSTagger(object):
             correct += sum([t1 == t2 for t1, t2 in zip(gold, guess)])
             total += len(words)
 
+            # for i, w in enumerate(words):
+            #     if gold[i] != guess[i]:
+            #         print(w, gold[i], guess[i], w in vocab)
+
             # Check unknown word accuracy.
             tmp = zip(*[[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
                         if w not in vocab])
