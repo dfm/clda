@@ -4,4 +4,4 @@ data
 src
 *.txt
 build
-.so
+*.so
