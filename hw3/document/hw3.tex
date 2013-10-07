@@ -216,7 +216,7 @@ The features that I chose to use are:
 \begin{itemize}
 \item{a smoothed suffix distribution,}
 \item{the case of the first character, and}
-\item{the number of digits in the word.}
+\item{an indication of the existence of numbers in the word.}
 \end{itemize}
 
 The smoothed suffix distribution looks similar to \eq{trigram} above but for
@@ -226,7 +226,7 @@ while still offering a lot of flexibility.
 In this case, the estimate of the unknown word suffix probability
 distribution (to be trained on the subset of the training data discussed
 above) is the following
-\begin{eqnarray}
+\begin{eqnarray}\eqlabel{psuff}
 p_\mathrm{suff}(w_i\,|\,t_i) &=& \theta_0\frac{f(t_i)}{N_\theta} +
     \frac{\theta_1\,f(t_i,\,\mathrm{suff}_1[w_i])
           + \theta_2\,f(t_i,\,\mathrm{suff}_2[w_i])
@@ -237,9 +237,9 @@ $\mathrm{suff}_m[w_i]$ indicates the last $m$ letters of the word $w_i$.
 
 I also built an empirical probability distribution for capitalization
 conditioned on the tags based on the same training subset.
-\begin{eqnarray}
+\begin{eqnarray}\eqlabel{pcap}
 p_\mathrm{cap} (w_i\,|\,t_i) &=&
-    \frac{f(t_i,\,\mathrm{cap}[w_i])}{N_\theta}
+    \frac{f(t_i,\,\mathrm{cap}[w_i])+1}{N_\theta+1}
 \end{eqnarray}
 where the $\mathrm{cap}$ function is defined as
 \begin{eqnarray}
@@ -248,9 +248,53 @@ where the $\mathrm{cap}$ function is defined as
     1 & \mbox{if the first letter of $w_i$ is uppercase.} \\
 \end{array}\right .
 \end{eqnarray}
+The added one in \eq{pcap} is there as a smoothing term to make sure that this
+probability never goes to exactly zero.
 
-The final feature of my unknown word distribution is a count of the number of
-digits in the word.
+The final feature of my unknown word model is a count of the number of digits
+in the word.
+I tried just using a flag indicating the existence of (at least) one number in
+the word but I found that a richer structure provided a somewhat better
+out-of-domain validation set performance.
+In the end, the best results that I found resulted from a model that I built
+by estimating a probability of observing a word with $K$ digits for each tag
+\begin{eqnarray}\eqlabel{pnum}
+p_\mathrm{num}(w_i\,|\,t_i) &=&
+    \frac{f(t_i,\,\mathrm{digits}[w_i])+1}{f(t_i)+K}
+\end{eqnarray}
+where
+\begin{eqnarray}
+\mathrm{digits}[w_i] &=& \left \{ \begin{array}{ll}
+    0 & \mbox{if there are no digits in $w_i$,} \\
+    1 & \mbox{if there is one digit in $w_i$,} \\
+    \cdots & \\
+    K & \mbox{if there are $\ge K$ digits in $w_i$.}
+\end{array}\right.
+\end{eqnarray}
+Note that \eq{pnum} is smoothed in the same way as \eq{pcap}.
+
+Combining the above features, we get the full probability distribution for
+unknown words
+\begin{eqnarray}\eqlabel{pfull}
+p(w_i\,|\,t_i) &=& p_\mathrm{suff}(w_i\,|\,t_i) \,
+                   p_\mathrm{cap}(w_i\,|\,t_i) \,
+                   p_\mathrm{num}(w_i\,|\,t_i) \quad.
+\end{eqnarray}
+Because of the smoothing applied to each term in this product, this
+probability should never be exactly zero.
+This is necessary because the features are not a perfect set of summary
+statistics and in practice some validation examples end up getting zero
+probability for \emph{every tag sequence}.
+This makes inference impossible and it is clearly an artificial effect.
+
+\section{Inference}
+
+The previous sections describe the form of the probabilistic generative model
+that we'll assume for this problem.
+They also explain the training procedure given a set of tagged sentences.
+Given this trained model, the only step left is inference: finding the tag
+sequence that maximizes the posterior probability.
+
 
 \begin{thebibliography}{}\raggedright
 
