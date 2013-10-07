@@ -225,7 +225,6 @@ class UnknownWordModel(object):
     def get_log_probs(self, tags, word):
         l1, l2, l3 = self.lambda1, self.lambda2, self.lambda3
         l0 = 1.0 - l1 - l2 - l3
-        l1 = 1.0 - l2 - l3
         s1, s2, s3 = word[-1], word[-2:], word[-3:]
         n = min([len(self._re.findall(word)), self.maxn-1])
         cap = word[0].lower() != word[0]
