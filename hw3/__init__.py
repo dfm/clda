@@ -184,7 +184,7 @@ class UnknownWordModel(object):
 
     _re = re.compile("[0-9]")
 
-    def __init__(self, maxn=2, theta1=0.1, theta2=0.3, theta3=0.5):
+    def __init__(self, maxn=10, theta1=0.1, theta2=0.3, theta3=0.5):
         self.lambda1 = theta1
         self.lambda2 = theta2
         self.lambda3 = theta3
