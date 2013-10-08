@@ -1,4 +1,5 @@
 \documentclass[11pt]{article}
+\usepackage{booktabs}
 \usepackage{natbib}
 \usepackage{fullpage}
 \usepackage{fancyhdr}
@@ -371,7 +372,242 @@ performance on all of the non-training data.
 
 \subsection{The \emph{Baseline} model}
 
-\section{Discussion}
+As mentioned previously, the only parameter in the \emph{Baseline} model is
+the unknown word threshold and in fact, the performance of the model on the
+validation sets isn't very sensitive to this number (as you can see in
+table~\ref{tab:baseline}).
+For thresholds in the range $1-50$, the performance is identical to the
+performance mentioned in the homework.
+For thresholds of $\gtrsim 100$, the performance on unknown words drops
+drastically.
+The fact that the unknown word performance decreases with increasing threshold
+is intuitive because the expectation is that the distribution of \emph{rare}
+words should be more representative of the unknown words than the full corpus.
+That being said, I don't have any good idea for why this effect seems to be
+exhibited as a step function in this specific model.
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{c c cccc}
+\toprule
+&& \multicolumn{2}{c}{in-domain [\%]} & \multicolumn{2}{c}{out-of-domain [\%]}\\
+threshold & $N$ & known & unknown & known & unknown \\\midrule
+1 & 17556 & 91.669 & 42.710 & 87.363 & 52.944\\
+5 & 53551 & 91.669 & 42.710 & 87.363 & 52.944\\
+10 & 81217 & 91.669 & 42.710 & 87.363 & 52.944\\
+50 & 187735 & 91.669 & 42.710 & 87.363 & 52.944\\
+100 & 254225 & 90.888 & 9.651 & 83.834 & 9.898\\
+1000 & 511208 & 90.888 & 9.651 & 83.834 & 9.898\\
+10000 & 736952 & 90.888 & 9.651 & 83.834 & 9.898\\\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance of the \emph{Baseline} model (described in the text) on the
+in-domain and out-of-domain validation sets.
+The column ``threshold'' indicates the maximum number of times a word can
+appear in the training corpus and still be used to train the unknown word
+model and $N$ is the number of examples that meet this criterion.
+The performance is measured in percentage of validation examples correctly
+classified.
+\label{tab:baseline}}
+\end{table}
+
+\subsection{The \emph{Trigram} \& \emph{Viterbi} models}
+
+In total, the \emph{Trigram} and \emph{Viterbi} models have 4 parameters each
+and since they control the same part of the model in both cases I expected the
+model performance to scale similarly with these parameters in both cases.
+The check the performance, I ran a small grid in threshold and the smoothing
+parameters.
+For the range of the smoothing parameters, I chose values close to the ones
+estimated using the deleted interpolation technique described above.
+Table~\ref{tab:trigram} shows the performance of the \emph{Trigram} model on
+the two validation sets and (again) the performance is not very sensitive to
+these parameters.
+The best model in this case has:
+\begin{eqnarray}
+\mathrm{threshold} = 2,\quad\lambda_2 = 0.2\quad\mbox{and}\quad
+\lambda_3 = 0.6\quad.
+\end{eqnarray}
+Similarly, for the \emph{Viterbi}, the results are shown in
+table~\ref{tab:viterbi}.
+Much of the scaling in accuracy is the same as in the \emph{Trigram} case but
+the preferred model is slightly different:
+\begin{eqnarray}
+\mathrm{threshold} = 2,\quad\lambda_2 = 0.2\quad\mbox{and}\quad
+\lambda_3 = 0.7\quad.
+\end{eqnarray}
+It is interesting to note that the unknown word accuracy is
+\emph{significantly} better when doing exact inference.
+This is because the unknown word model that I'm using in these baseline models
+is very noisy.
+This means that when the greedy decoder hits an unknown word, the signal is
+muddied by the noise in the unknown word model even if the true optimum is
+well constrained by the tag sequence probabilities.
+
+\begin{table}[phtb]
+\begin{center}
+\begin{tabular}{c cc cccc}
+\toprule
+&&& \multicolumn{2}{c}{in-domain [\%]} & \multicolumn{2}{c}{out-of-domain [\%]}\\
+threshold & $\lambda_2$ & $\lambda_3$ & known & unknown & known & unknown \\\midrule
+2 & 0.2 & 0.5 & 93.685 & 51.951 & 89.016 & 45.228\\
+{\bf 2} & {\bf 0.2} & {\bf 0.6} & {\bf 93.726} & {\bf 52.156} & {\bf 89.070} &
+{\bf 45.584}\\
+2 & 0.2 & 0.7 & 93.675 & 52.361 & 89.024 & 45.431\\
+2 & 0.3 & 0.5 & 93.702 & 51.848 & 89.032 & 45.228\\
+2 & 0.3 & 0.6 & 93.680 & 52.156 & 89.066 & 45.584\\
+2 & 0.4 & 0.5 & 93.656 & 52.156 & 88.991 & 45.381\\
+5 & 0.2 & 0.5 & 93.661 & 50.821 & 89.016 & 45.228\\
+5 & 0.2 & 0.6 & 93.714 & 51.745 & 89.049 & 45.330\\
+5 & 0.2 & 0.7 & 93.668 & 52.156 & 89.032 & 45.533\\
+5 & 0.3 & 0.5 & 93.697 & 51.643 & 89.032 & 45.228\\
+5 & 0.3 & 0.6 & 93.678 & 52.053 & 89.061 & 45.533\\
+5 & 0.4 & 0.5 & 93.653 & 52.053 & 88.991 & 45.381\\
+10 & 0.2 & 0.5 & 93.656 & 50.821 & 89.024 & 45.279\\
+10 & 0.2 & 0.6 & 93.712 & 51.643 & 89.045 & 45.279\\
+10 & 0.2 & 0.7 & 93.666 & 52.053 & 89.032 & 45.533\\
+10 & 0.3 & 0.5 & 93.700 & 51.745 & 89.036 & 45.279\\
+10 & 0.3 & 0.6 & 93.675 & 51.951 & 89.057 & 45.482\\
+10 & 0.4 & 0.5 & 93.656 & 52.156 & 88.986 & 45.279\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance of the \emph{Trigram} model (described in the text) on the
+in-domain and out-of-domain validation sets.
+The column ``threshold'' indicates the maximum number of times a word can
+appear in the training corpus and still be used to train the unknown word
+model and $\lambda_2$ and $\lambda_3$ are the parameters that control the
+interpolation of the trigram scorer.
+The performance is measured in percentage of validation examples correctly
+classified.
+\label{tab:trigram}}
+\end{table}
+
+\begin{table}[phtb]
+\begin{center}
+\begin{tabular}{c cc cccc}
+\toprule
+&&& \multicolumn{2}{c}{in-domain [\%]} & \multicolumn{2}{c}{out-of-domain [\%]}\\
+threshold & $\lambda_2$ & $\lambda_3$ & known & unknown & known & unknown \\\midrule
+2 & 0.2 & 0.5 & 95.502 & 59.035 & 91.451 & 53.198\\
+2 & 0.2 & 0.6 & 95.572 & 59.446 & 91.542 & 53.858\\
+{\bf 2} & {\bf 0.2} & {\bf 0.7} & {\bf 95.652} & {\bf 60.164} & {\bf 91.617} &
+{\bf 54.061}\\
+2 & 0.3 & 0.5 & 95.592 & 60.267 & 91.496 & 53.299\\
+2 & 0.3 & 0.6 & 95.623 & 60.062 & 91.596 & 53.706\\
+2 & 0.4 & 0.5 & 95.611 & 60.267 & 91.550 & 53.299\\
+5 & 0.2 & 0.5 & 95.478 & 57.906 & 91.384 & 52.437\\
+5 & 0.2 & 0.6 & 95.572 & 59.446 & 91.476 & 52.995\\
+5 & 0.2 & 0.7 & 95.631 & 59.446 & 91.513 & 52.944\\
+5 & 0.3 & 0.5 & 95.553 & 58.932 & 91.438 & 52.538\\
+5 & 0.3 & 0.6 & 95.619 & 60.062 & 91.559 & 53.401\\
+5 & 0.4 & 0.5 & 95.582 & 59.240 & 91.455 & 52.183\\
+10 & 0.2 & 0.5 & 95.446 & 56.674 & 91.334 & 51.777\\
+10 & 0.2 & 0.6 & 95.531 & 57.906 & 91.401 & 52.132\\
+10 & 0.2 & 0.7 & 95.623 & 59.035 & 91.484 & 52.640\\
+10 & 0.3 & 0.5 & 95.517 & 57.084 & 91.392 & 52.030\\
+10 & 0.3 & 0.6 & 95.587 & 58.830 & 91.496 & 52.741\\
+10 & 0.4 & 0.5 & 95.558 & 58.008 & 91.442 & 51.980\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The same as table~\ref{tab:trigram} but for the \emph{Viterbi} model.
+\label{tab:viterbi}}
+\end{table}
+
+\subsection{The \emph{Unknown} model}
+
+The \emph{Unknown} model includes 3 extra parameters on top of the parameters
+needed for the previous two models: the $\lambda$s that control the smoothing
+of the suffix model for unknown words.
+The thought of running a full grid in all of these parameters was a little
+daunting so I decided to fix the $\lambda$ parameters at their preferred
+values from the previous section ($\lambda_2 = 0.2$ and $\lambda_3 = 0.7$) and
+then run a grid of models with different values of the $\theta$s.
+The results of this grid are shown in table~\ref{tab:unknown}.
+From this table, you'll notice that the preferred values are:
+\begin{eqnarray}
+\mathrm{threshold} = 5,\quad\theta_1 = 0.1,\quad\theta_2 = 0.5\quad
+\mbox{and}\quad \theta_3 = 0.3\quad.
+\end{eqnarray}
+It's interesting to note that the weight of the $\mathrm{suff}_2$ term is
+larger than the $\mathrm{suff}_3$ term.
+I think that this is probably true because many common suffixes are only two
+letters (for example ``-ly'', ``-ed'', ``-es'', ``-ic'', \emph{etc.}).
+Many of the longer suffixes---such as ``-ing'', ``-tion'', ``-ous'',
+\emph{etc.}---can also be well classified by their last two letters.
+
+\begin{table}[phtb]
+\begin{center}
+\begin{tabular}{c ccc cccc}
+\toprule
+&&&& \multicolumn{2}{c}{in-domain [\%]} & \multicolumn{2}{c}{out-of-domain [\%]}\\
+threshold & $\theta_1$ & $\theta_2$ & $\theta_3$ & known & unknown & known & unknown \\\midrule
+2 & 0.01 & 0.3 & 0.3 & 96.220 & 82.854 & 92.824 & 67.766\\
+2 & 0.01 & 0.3 & 0.5 & 96.225 & 83.162 & 92.986 & 69.695\\
+2 & 0.01 & 0.5 & 0.3 & 96.223 & 83.162 & 93.020 & 70.152\\
+2 & 0.05 & 0.3 & 0.3 & 96.225 & 83.162 & 92.920 & 68.832\\
+2 & 0.05 & 0.3 & 0.5 & 96.232 & 83.573 & 93.086 & 70.964\\
+2 & 0.05 & 0.5 & 0.3 & 96.232 & 83.573 & 93.103 & 71.117\\
+2 & 0.10 & 0.3 & 0.3 & 96.223 & 83.060 & 93.024 & 70.152\\
+2 & 0.10 & 0.3 & 0.5 & 96.232 & 83.573 & 93.170 & 71.827\\
+2 & 0.10 & 0.5 & 0.3 & 96.232 & 83.573 & 93.190 & 72.132\\
+5 & 0.01 & 0.3 & 0.3 & 96.218 & 82.752 & 92.824 & 67.817\\
+5 & 0.01 & 0.3 & 0.5 & 96.223 & 83.162 & 92.991 & 69.695\\
+5 & 0.01 & 0.5 & 0.3 & 96.225 & 83.265 & 93.020 & 70.102\\
+5 & 0.05 & 0.3 & 0.3 & 96.220 & 82.957 & 92.941 & 69.086\\
+5 & 0.05 & 0.3 & 0.5 & 96.230 & 83.470 & 93.128 & 71.371\\
+5 & 0.05 & 0.5 & 0.3 & 96.230 & 83.470 & 93.111 & 71.269\\
+5 & 0.10 & 0.3 & 0.3 & 96.225 & 83.162 & 93.041 & 70.406\\
+5 & 0.10 & 0.3 & 0.5 & 96.237 & 83.778 & 93.174 & 71.980\\
+{\bf 5} & {\bf 0.10} & {\bf 0.5} & {\bf 0.3} & {\bf 96.237} & {\bf 83.778} &
+{\bf 93.195} & {\bf 72.183}\\
+10 & 0.01 & 0.3 & 0.3 & 96.225 & 82.957 & 92.812 & 67.766\\
+10 & 0.01 & 0.3 & 0.5 & 96.227 & 83.368 & 92.957 & 69.442\\
+10 & 0.01 & 0.5 & 0.3 & 96.230 & 83.470 & 92.999 & 69.949\\
+10 & 0.05 & 0.3 & 0.3 & 96.220 & 82.957 & 92.920 & 68.934\\
+10 & 0.05 & 0.3 & 0.5 & 96.225 & 83.265 & 93.107 & 71.269\\
+10 & 0.05 & 0.5 & 0.3 & 96.225 & 83.265 & 93.120 & 71.472\\
+10 & 0.10 & 0.3 & 0.3 & 96.223 & 83.162 & 93.032 & 70.305\\
+10 & 0.10 & 0.3 & 0.5 & 96.232 & 83.573 & 93.161 & 71.929\\
+10 & 0.10 & 0.5 & 0.3 & 96.232 & 83.573 & 93.174 & 72.030\\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance of the \emph{Unknown} model (described in the text) on the
+in-domain and out-of-domain validation sets.
+The column ``threshold'' indicates the maximum number of times a word can
+appear in the training corpus and still be used to train the unknown word
+model and $\theta_1$, $\theta_2$ and $\theta_3$ are the parameters that
+control the interpolation of the unknown word suffix model.
+The performance is measured in percentage of validation examples correctly
+classified.
+\label{tab:unknown}}
+\end{table}
+
+\section{Remaining Errors}
+
+In order to interpret these final numbers, I ran the preferred model from the
+previous section and saved all the mis-classifications.
+On the in-domain validation set, most of the remaining errors are somewhat
+subtle---for example, confusion between \code{VBD} (the past tense) and
+\code{VBN} (the past participle)---but a major class of confusions occur when
+a word sits at the beginning of the sentence.
+This problem persists because most words are only capitalized when they are at
+the beginning of the sentence but in my implementation, the capitalized
+version is counted as a different word.
+
+Capitals at beginning of sentences...
+Typos in test data: ``pic's'' (gold: NNS, guess: NN)
+Alternate spellings: ``neighbourhood'' vs. ``neighborhood''
+Bad tags: ``tv'' (gold: NNP, guess: NN) vs. ``AK'' (gold: NN, guess: NNP)
+Punctuation/tagging conventions: ``-'' (gold: ``,'', ``HYPH'')
+``"''
+Symbols as short forms: ``\#'' (gold: NN, guess: \$)
 
 \begin{thebibliography}{}\raggedright
 
