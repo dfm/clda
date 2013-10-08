@@ -126,6 +126,8 @@ class TrigramScorer(object):
             self.p_tag_ptag[pt][t] += 1
             self.p_tag_pptag[" ".join([ppt, pt])][t] += 1
 
+        self.tags = self.p_tag.keys()
+
         # Normalize the distributions.
         self.p_tag.normalize()
         [dist.normalize() for k, dist in self.p_word_tag.items()]
@@ -139,6 +141,7 @@ class TrigramScorer(object):
         print("Training unknown word classifier with {0} examples"
               .format(len(training_data)))
         self.unknown.train(training_data)
+        return len(training_data)
 
     def trigram_scores(self, trigram):
         tags = self.p_tag.keys()
@@ -164,6 +167,49 @@ class TrigramScorer(object):
         return [log((1-l2-l3)*p1[t] + l2*p2[t] + l3*p3[t]) + wp
                 if wp is not None else None
                 for t, wp in zip(tags, word_prob)]
+
+
+class ContextFreeScorer(TrigramScorer):
+
+    def __init__(self, unknown):
+        self.unknown = unknown
+        self.p_word_tag = defaultdict(lambda: Counter(float))
+
+    def train(self, sentences, threshold=10):
+        trigrams = extract_all_trigrams(sentences)
+        self.words = set([])
+        self.tags = set([])
+        word_counts = defaultdict(int)
+        for trigram in trigrams:
+            ppt, pt, t, w = trigram
+            self.words.add(w)
+            self.tags.add(t)
+            word_counts[w] += 1
+            self.p_word_tag[w][t] += 1
+        self.tags = list(self.tags)
+
+        [dist.normalize() for k, dist in self.p_word_tag.items()]
+
+        # Build the unknown word model using the uncommon words.
+        rare_words = set([w for w, c in word_counts.items() if c <= threshold])
+        training_data = [(w, t) for sentence in sentences
+                         for w, t in sentence if w in rare_words]
+        print("Training unknown word classifier with {0} examples"
+              .format(len(training_data)))
+        self.unknown.train(training_data)
+        return len(training_data)
+
+    def trigram_scores_list(self, trigram, tags):
+        # Parse the trigram and deal with unknown words.
+        ppt, pt, w = trigram
+        if w not in self.words:
+            word_prob = self.unknown.get_log_probs(tags, w)
+
+        else:
+            pw = self.p_word_tag[w]
+            word_prob = [log(pw[t]) if t in pw else None for t in tags]
+
+        return word_prob
 
 
 class StupidUnknownWordModel(object):
@@ -217,7 +263,7 @@ class UnknownWordModel(object):
         [p.normalize() for t, p in self.p2.items()]
         [p.normalize() for t, p in self.p3.items()]
         for t in self.p0.keys():
-            self.pc[t] = max([self.pc[t], 1.0]) / len(data)
+            self.pc[t] = (self.pc[t] + 1.0) / (len(data) + 1)
         for t, p in self.pn.items():
             norm = sum([v+1 for v in p])
             self.pn[t] = [(v + 1) / norm for v in p]
@@ -240,7 +286,7 @@ class POSTagger(object):
 
     def __init__(self, scorer, greedy=False):
         self.scorer = scorer
-        self.tags = [START] + self.scorer.p_tag.keys()
+        self.tags = [START] + self.scorer.tags
         if greedy:
             self.decode = self.greedy_decode
         else:
@@ -272,7 +318,8 @@ class POSTagger(object):
                                                                    ninf)
                     for i, word in enumerate(list(words) + [STOP, STOP])])
 
-    def test(self, sentences, check_sub=False, outfile=None):
+    def test(self, sentences, check_sub=False, outfile=None,
+             verbose=False):
         if outfile is not None:
             open(outfile, "w")
 
@@ -293,9 +340,12 @@ class POSTagger(object):
             correct += sum([t1 == t2 for t1, t2 in zip(gold, guess)])
             total += len(words)
 
-            # for i, w in enumerate(words):
-            #     if gold[i] != guess[i]:
-            #         print(w, gold[i], guess[i], w in vocab)
+            if verbose:
+                for i, w in enumerate(words):
+                    if gold[i] != guess[i]:
+                        print("ERROR: {0}\tGOLD: {1}\tGUESS: {2}\t{3}"
+                              .format(w, gold[i], guess[i],
+                                      "" if w in vocab else "(unknown)"))
 
             # Check unknown word accuracy.
             tmp = zip(*[[gl == gu, 1] for w, gl, gu in zip(words, gold, guess)
