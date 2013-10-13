@@ -6,8 +6,11 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = []
 
+import os
+import random
+from glob import glob
 from collections import defaultdict
-from itertools import product, izip, izip_longest
+from itertools import izip, izip_longest
 
 ALIGNMENT_TYPES = [None, "P", "S"]
 
@@ -58,6 +61,17 @@ def read_sentence_pairs(base_path, alignments=False):
     return pairs
 
 
+def load_training_pairs(basepath, maxn):
+    fns = glob(os.path.join(basepath, "*.e"))
+    random.shuffle(fns)
+    pairs = []
+    for fn in fns:
+        pairs += read_sentence_pairs(os.path.splitext(fn)[0])
+        if len(pairs) > maxn:
+            break
+    return pairs[:maxn]
+
+
 def test(aligner, pairs):
     prop_poss_count = 0
     prop_sure_count = 0
@@ -86,7 +100,7 @@ def test(aligner, pairs):
 def predict(aligner, pairs, fn):
     proposals = map(aligner.align, pairs)
     with open(fn, "w") as f:
-        [f.write(" ".join(["{0}-{1}".format(*p)
+        [f.write(" ".join(["{1}-{0}".format(*p)
                            for p in proposal if p[0] >= 0]) + " \n")
          for proposal in proposals]
 
@@ -131,7 +145,6 @@ class HeuristicWordAligner(BaselineWordAligner):
                 self.count_both[e][f] += 1
                 self.count_en[e] += 1
                 self.count_fr[f] += 1
-        print(self.count_en)
 
     def align(self, pair):
         cb = self.count_both
@@ -152,12 +165,15 @@ class HeuristicWordAligner(BaselineWordAligner):
 
 if __name__ == "__main__":
     # Load the data.
+    n = 100000
+    print("Loading {0} training sentence pairs.".format(n))
+    training_pairs = load_training_pairs("data/training", n)
     validation_pairs = read_sentence_pairs("data/trial/trial", alignments=True)
     test_pairs = read_sentence_pairs("data/test/test")
 
     # Set-up the aligner.
     aligner = HeuristicWordAligner()
-    aligner.train(validation_pairs)
+    aligner.train(training_pairs)
     # aligner = BaselineWordAligner()
 
     # Render the alignments.
