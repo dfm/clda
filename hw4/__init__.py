@@ -6,7 +6,8 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = []
 
-from itertools import izip_longest
+from collections import defaultdict
+from itertools import product, izip, izip_longest
 
 ALIGNMENT_TYPES = [None, "P", "S"]
 
@@ -119,13 +120,45 @@ class BaselineWordAligner(object):
         print()
 
 
+class HeuristicWordAligner(BaselineWordAligner):
+
+    def train(self, pairs):
+        self.count_both = defaultdict(lambda: defaultdict(int))
+        self.count_en = defaultdict(int)
+        self.count_fr = defaultdict(int)
+        for pair in pairs:
+            for e, f in izip(pair[0], pair[1]):
+                self.count_both[e][f] += 1
+                self.count_en[e] += 1
+                self.count_fr[f] += 1
+        print(self.count_en)
+
+    def align(self, pair):
+        cb = self.count_both
+        ce = self.count_en
+        cf = self.count_fr
+        result = []
+        for fi, f in enumerate(pair[1]):
+            probs = [(ei, cb[e][f]/(ce[e]*cf[f]))
+                     for ei, e in enumerate(pair[0])
+                     if e in ce and f in cf]
+            if not len(probs):
+                result.append((-1, fi))
+                continue
+            result.append((max(probs, key=lambda o: o[1])[0], fi))
+
+        return result
+
+
 if __name__ == "__main__":
     # Load the data.
     validation_pairs = read_sentence_pairs("data/trial/trial", alignments=True)
     test_pairs = read_sentence_pairs("data/test/test")
 
     # Set-up the aligner.
-    aligner = BaselineWordAligner()
+    aligner = HeuristicWordAligner()
+    aligner.train(validation_pairs)
+    # aligner = BaselineWordAligner()
 
     # Render the alignments.
     map(aligner.render, validation_pairs)
