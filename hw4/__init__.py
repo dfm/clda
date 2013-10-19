@@ -194,18 +194,16 @@ class IBMModel1Aligner(BaselineWordAligner):
 
     def train(self, pairs, niter=40):
         # Figure out the vocabularies.
-        self.vocab_en = []
-        self.vocab_fr = []
+        self.vocab_en = defaultdict(lambda: len(self.vocab_en))
+        self.vocab_fr = defaultdict(lambda: len(self.vocab_fr))
         index_pairs = []
         for pair in pairs:
             index_pairs.append((
-                np.array([index_or_append(self.vocab_en, w.lower())
+                np.array([self.vocab_en[w.lower()]
                           for w in pair[0]] + [-1]),
-                np.array([index_or_append(self.vocab_fr, w.lower())
+                np.array([self.vocab_fr[w.lower()]
                           for w in pair[1]])
             ))
-
-        self.vocab_en += [NULL_TOKEN]
 
         self.run_em(index_pairs, niter)
 
