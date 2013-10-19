@@ -8,11 +8,28 @@ __all__ = []
 
 import os
 import random
+import numpy as np
 from glob import glob
 from collections import defaultdict
 from itertools import izip, izip_longest
 
+NULL_TOKEN = "<NULL>"
 ALIGNMENT_TYPES = [None, "P", "S"]
+
+
+def default_index(x, a, d):
+    try:
+        return x.index(a)
+    except ValueError:
+        return d
+
+
+def index_or_append(obj, el):
+    try:
+        return obj.index(el)
+    except ValueError:
+        obj.append(el)
+        return len(obj) - 1
 
 
 def parse_sentence(line):
@@ -63,12 +80,16 @@ def read_sentence_pairs(base_path, alignments=False):
 
 def load_training_pairs(basepath, maxn):
     fns = glob(os.path.join(basepath, "*.e"))
-    random.shuffle(fns)
+    if maxn is not None:
+        random.shuffle(fns)
     pairs = []
     for fn in fns:
+        print("  ... File: {0}".format(fn))
         pairs += read_sentence_pairs(os.path.splitext(fn)[0])
-        if len(pairs) > maxn:
+        if maxn is not None and len(pairs) > maxn:
             break
+    if maxn is None:
+        return pairs
     return pairs[:maxn]
 
 
@@ -107,6 +128,9 @@ def predict(aligner, pairs, fn):
 
 class BaselineWordAligner(object):
 
+    def train(self, pairs, **kwargs):
+        pass
+
     def align(self, pair):
         en, fr, al = pair
         el, fl = len(en), len(fr)
@@ -136,7 +160,7 @@ class BaselineWordAligner(object):
 
 class HeuristicWordAligner(BaselineWordAligner):
 
-    def train(self, pairs):
+    def train(self, pairs, **kwargs):
         self.count_both = defaultdict(lambda: defaultdict(int))
         self.count_en = defaultdict(int)
         self.count_fr = defaultdict(int)
@@ -163,24 +187,120 @@ class HeuristicWordAligner(BaselineWordAligner):
         return result
 
 
+class IBMModel1Aligner(BaselineWordAligner):
+
+    def __init__(self, nullprob=0.2):
+        self.nullprob = nullprob
+
+    def train(self, pairs, niter=40):
+        # Figure out the vocabularies.
+        self.vocab_en = []
+        self.vocab_fr = []
+        index_pairs = []
+        for pair in pairs:
+            index_pairs.append((
+                np.array([index_or_append(self.vocab_en, w.lower())
+                          for w in pair[0]] + [-1]),
+                np.array([index_or_append(self.vocab_fr, w.lower())
+                          for w in pair[1]])
+            ))
+
+        self.vocab_en += [NULL_TOKEN]
+
+        self.run_em(index_pairs, niter)
+
+    def run_em(self, pairs, niter):
+        # Initialize the p(f | e) as a uniform distribution.
+        self.prob_fe = np.ones((len(self.vocab_en), len(self.vocab_fr)))
+        self.prob_fe /= np.sum(self.prob_fe, axis=1)[:, None]
+        for i in range(niter):
+            print("EM iteration {0}...".format(i))
+            counts = np.zeros_like(self.prob_fe)
+            for pair in pairs:
+                apost, inds = self._get_rel_post(pair)
+                counts[inds] += apost / np.sum(apost)
+            print(np.sum(counts))
+
+            # Normalize the counts to get the ML pair probabilities.
+            self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
+
+    def _get_rel_post(self, pair):
+        # Compute the alignment probability (uniform).
+        align_prob = (1-self.nullprob)*np.ones(len(pair[0]))/(len(pair[0])-1.0)
+
+        # Add extra probability for the null alignment.
+        align_prob[-1] = self.nullprob
+
+        # Compute the (relative) posterior probabilities for all
+        # possible alignments.
+        inds = (pair[0][:, None], pair[1][None, :])
+        return self.prob_fe[inds] * align_prob[:, None], inds
+
+    def align(self, pair):
+        en_inds = np.array([default_index(self.vocab_en, w.lower(), -1)
+                            for w in pair[0]] + [-1])
+        fr_inds = np.array([default_index(self.vocab_fr, w.lower(), -1)
+                            for w in pair[1]])
+        apost, inds = self._get_rel_post((en_inds, fr_inds))
+        ei = np.argmax(apost, axis=0)
+
+        # Deal with NULL alignments.
+        ei[ei == len(pair[0])] = -1
+
+        return zip(ei, np.arange(len(pair[1])))
+
+
 if __name__ == "__main__":
-    # Load the data.
-    n = 100000
-    print("Loading {0} training sentence pairs.".format(n))
-    training_pairs = load_training_pairs("data/training", n)
-    validation_pairs = read_sentence_pairs("data/trial/trial", alignments=True)
-    test_pairs = read_sentence_pairs("data/test/test")
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Part of speech tagging.")
+    parser.add_argument("-d", "--data", default="data",
+                        help="The base path for the data files.")
+    parser.add_argument("--model", default="baseline",
+                        help="The alignment model to use")
+    parser.add_argument("--test", action="store_true",
+                        help="Run the test experiment")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Render the validation alignments")
+    parser.add_argument("-n", "--number", type=int, default=1000,
+                        help="The number of training sentences")
+    parser.add_argument("-i", "--niter", type=int, default=40,
+                        help="The number of EM iterations to run")
+    args = parser.parse_args()
+
+    if args.test:
+        validation_pairs = read_sentence_pairs("{0}/mini/mini"
+                                               .format(args.data),
+                                               alignments=True)
+        training_pairs = validation_pairs
+
+    else:
+        # Load the data.
+        print("Loading {0} training sentence pairs.".format(args.number))
+        training_pairs = load_training_pairs("{0}/training".format(args.data),
+                                             args.number)
+        validation_pairs = read_sentence_pairs("{0}/trial/trial"
+                                               .format(args.data),
+                                               alignments=True)
+        test_pairs = read_sentence_pairs("data/test/test")
 
     # Set-up the aligner.
-    aligner = HeuristicWordAligner()
-    aligner.train(training_pairs)
-    # aligner = BaselineWordAligner()
+    aligner = BaselineWordAligner()
+    if args.model.lower() == "heuristic":
+        aligner = HeuristicWordAligner()
+    elif args.model.lower() == "model1":
+        aligner = IBMModel1Aligner()
+
+    print("Training word alignment model.")
+    aligner.train(training_pairs, niter=args.niter)
 
     # Render the alignments.
-    map(aligner.render, validation_pairs)
+    if args.verbose:
+        map(aligner.render, validation_pairs)
 
     # Compute the test statistics on the validation set.
     test(aligner, validation_pairs)
 
     # Write the predictions.
-    predict(aligner, test_pairs, "output.txt")
+    if not args.test:
+        predict(aligner, test_pairs, "output.txt")
