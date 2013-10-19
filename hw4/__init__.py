@@ -11,7 +11,7 @@ import random
 import numpy as np
 from glob import glob
 from collections import defaultdict
-from itertools import izip, izip_longest
+from itertools import izip, izip_longest, product
 
 NULL_TOKEN = "<NULL>"
 ALIGNMENT_TYPES = [None, "P", "S"]
@@ -189,7 +189,7 @@ class HeuristicWordAligner(BaselineWordAligner):
 
 class IBMModel1Aligner(BaselineWordAligner):
 
-    def __init__(self, nullprob=0.2):
+    def __init__(self, nullprob=0.02):
         self.nullprob = nullprob
 
     def train(self, pairs, niter=40):
@@ -200,10 +200,12 @@ class IBMModel1Aligner(BaselineWordAligner):
         for pair in pairs:
             index_pairs.append((
                 np.array([self.vocab_en[w.lower()]
-                          for w in pair[0]] + [-1]),
+                          for w in pair[0]]),
                 np.array([self.vocab_fr[w.lower()]
                           for w in pair[1]])
             ))
+        self.vocab_en = dict(self.vocab_en)
+        self.vocab_fr = dict(self.vocab_fr)
 
         self.run_em(index_pairs, niter)
 
@@ -215,16 +217,23 @@ class IBMModel1Aligner(BaselineWordAligner):
             print("EM iteration {0}...".format(i))
             counts = np.zeros_like(self.prob_fe)
             for pair in pairs:
-                apost, inds = self._get_rel_post(pair)
-                counts[inds] += apost / np.sum(apost)
-            print(np.sum(counts))
+                inds = (pair[0][:, None], pair[1][None, :])
+                counts[inds] += (self.prob_fe[inds]
+                                 / np.sum(self.prob_fe[inds], axis=1)[:, None])
+
+            # perplex = 0.0
+            # for pair in pairs:
+            #     apost, inds = self._get_rel_post(pair)
+            #     perplex += np.log2(np.sum(apost))
+            #     counts[inds] += apost / np.sum(apost)
 
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
+            print(np.sum(self.prob_fe))
 
     def _get_rel_post(self, pair):
         # Compute the alignment probability (uniform).
-        align_prob = (1-self.nullprob)*np.ones(len(pair[0]))/(len(pair[0])-1.0)
+        align_prob = (1-self.nullprob)*np.ones(len(pair[0]))/(len(pair[0])-1)
 
         # Add extra probability for the null alignment.
         align_prob[-1] = self.nullprob
@@ -235,9 +244,9 @@ class IBMModel1Aligner(BaselineWordAligner):
         return self.prob_fe[inds] * align_prob[:, None], inds
 
     def align(self, pair):
-        en_inds = np.array([default_index(self.vocab_en, w.lower(), -1)
+        en_inds = np.array([self.vocab_en.get(w.lower(), -1)
                             for w in pair[0]] + [-1])
-        fr_inds = np.array([default_index(self.vocab_fr, w.lower(), -1)
+        fr_inds = np.array([self.vocab_fr.get(w.lower(), -1)
                             for w in pair[1]])
         apost, inds = self._get_rel_post((en_inds, fr_inds))
         ei = np.argmax(apost, axis=0)
