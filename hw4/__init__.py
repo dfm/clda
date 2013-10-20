@@ -276,10 +276,13 @@ class IBMModel2Aligner(IBMModel1Aligner):
                 align_prob, d = self._alignment_prob(pair, True)
                 inds = (pair[0][:, None], pair[1][None, :])
                 p = align_prob * self.prob_fe[inds]
+                if np.any(np.sum(p, axis=1) == 0):
+                    print("skipping")
+                    continue
                 p /= np.sum(p, axis=1)[:, None]
                 counts[inds] += p
-                num += np.sum(p[:-1].flatten())
-                denom += np.sum(d[:-1].flatten() * p[:-1].flatten())
+                num += np.sum(p[:-1])
+                denom += np.sum(d[:-1] * p[:-1])
 
             # Update alpha.
             self.alpha = num / denom
@@ -295,6 +298,9 @@ class IBMModel2Aligner(IBMModel1Aligner):
         d *= len(pair[0])/len(pair[1])
         align_prob = np.exp(-self.alpha*d)
         nullprob = self.nullprob
+        if np.any(np.sum(align_prob[:-1], axis=0) == 0):
+            print(align_prob)
+            assert 0
         align_prob *= (1-nullprob)/np.sum(align_prob[:-1], axis=0)[None, :]
         align_prob[-1, :] = nullprob
         if get_deltas:
@@ -343,7 +349,7 @@ if __name__ == "__main__":
     elif args.model.lower() == "model1":
         aligner = IBMModel1Aligner()
     elif args.model.lower() == "model2":
-        aligner = IBMModel2Aligner(0.1)
+        aligner = IBMModel2Aligner(0.3)
 
     print("Training word alignment model.")
     aligner.train(training_pairs, niter=args.niter)
