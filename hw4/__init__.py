@@ -189,7 +189,7 @@ class HeuristicWordAligner(BaselineWordAligner):
 
 class IBMModel1Aligner(BaselineWordAligner):
 
-    def __init__(self, nullprob=0.02):
+    def __init__(self, nullprob=0.2):
         self.nullprob = nullprob
 
     def train(self, pairs, niter=40):
@@ -221,27 +221,26 @@ class IBMModel1Aligner(BaselineWordAligner):
                 counts[inds] += (self.prob_fe[inds]
                                  / np.sum(self.prob_fe[inds], axis=1)[:, None])
 
-            # perplex = 0.0
-            # for pair in pairs:
-            #     apost, inds = self._get_rel_post(pair)
-            #     perplex += np.log2(np.sum(apost))
-            #     counts[inds] += apost / np.sum(apost)
-
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
             print(np.sum(self.prob_fe))
 
-    def _get_rel_post(self, pair):
+    def _alignment_prob(self, pair):
         # Compute the alignment probability (uniform).
         align_prob = (1-self.nullprob)*np.ones(len(pair[0]))/(len(pair[0])-1)
 
         # Add extra probability for the null alignment.
         align_prob[-1] = self.nullprob
 
+        return align_prob[:, None]
+
+    def _get_rel_post(self, pair):
+        align_prob = self._alignment_prob(pair)
+
         # Compute the (relative) posterior probabilities for all
         # possible alignments.
         inds = (pair[0][:, None], pair[1][None, :])
-        return self.prob_fe[inds] * align_prob[:, None], inds
+        return self.prob_fe[inds] * align_prob, inds
 
     def align(self, pair):
         en_inds = np.array([self.vocab_en.get(w.lower(), -1)
@@ -255,6 +254,40 @@ class IBMModel1Aligner(BaselineWordAligner):
         ei[ei == len(pair[0])] = -1
 
         return zip(ei, np.arange(len(pair[1])))
+
+
+class IBMModel2Aligner(IBMModel1Aligner):
+
+    def __init__(self, alpha, *args, **kwargs):
+        super(IBMModel2Aligner, self).__init__(*args, **kwargs)
+        self.alpha = alpha
+
+    def run_em(self, pairs, niter):
+        # Initialize the p(f | e) as a uniform distribution.
+        self.prob_fe = np.ones((len(self.vocab_en), len(self.vocab_fr)))
+        self.prob_fe /= np.sum(self.prob_fe, axis=1)[:, None]
+        for i in range(niter):
+            print("EM iteration {0}...".format(i))
+            counts = np.zeros_like(self.prob_fe)
+            for pair in pairs:
+                align_prob = self._alignment_prob(pair, True)
+                inds = (pair[0][:, None], pair[1][None, :])
+                counts[inds] += (align_prob * self.prob_fe[inds]
+                                 / np.sum(self.prob_fe[inds], axis=1)[:, None])
+
+            # Normalize the counts to get the ML pair probabilities.
+            self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
+            print(np.sum(self.prob_fe))
+
+    def _alignment_prob(self, pair, nonull=False):
+        d = np.arange(len(pair[0]))[:, None] - np.arange(len(pair[1]))[None, :]
+        align_prob = np.exp(-self.alpha*np.abs(d)*len(pair[0])/len(pair[1]))
+        if nonull:
+            return align_prob/np.sum(align_prob, axis=0)[None, :]
+        nullprob = self.nullprob
+        align_prob *= (1-nullprob)/np.sum(align_prob[:-1], axis=0)[None, :]
+        align_prob[-1, :] = nullprob
+        return align_prob
 
 
 if __name__ == "__main__":
@@ -297,6 +330,8 @@ if __name__ == "__main__":
         aligner = HeuristicWordAligner()
     elif args.model.lower() == "model1":
         aligner = IBMModel1Aligner()
+    elif args.model.lower() == "model2":
+        aligner = IBMModel2Aligner(0.1)
 
     print("Training word alignment model.")
     aligner.train(training_pairs, niter=args.niter)
