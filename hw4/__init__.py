@@ -200,10 +200,12 @@ class IBMModel1Aligner(BaselineWordAligner):
         for pair in pairs:
             index_pairs.append((
                 np.array([self.vocab_en[w.lower()]
-                          for w in pair[0]]),
+                          for w in pair[0]] + [-1]),
                 np.array([self.vocab_fr[w.lower()]
                           for w in pair[1]])
             ))
+
+        print(self.vocab_en[NULL_TOKEN])
         self.vocab_en = dict(self.vocab_en)
         self.vocab_fr = dict(self.vocab_fr)
 
@@ -269,24 +271,34 @@ class IBMModel2Aligner(IBMModel1Aligner):
         for i in range(niter):
             print("EM iteration {0}...".format(i))
             counts = np.zeros_like(self.prob_fe)
+            num, denom = 0.0, 0.0
             for pair in pairs:
-                align_prob = self._alignment_prob(pair, True)
+                align_prob, d = self._alignment_prob(pair, True)
                 inds = (pair[0][:, None], pair[1][None, :])
-                counts[inds] += (align_prob * self.prob_fe[inds]
-                                 / np.sum(self.prob_fe[inds], axis=1)[:, None])
+                p = align_prob * self.prob_fe[inds]
+                p /= np.sum(p, axis=1)[:, None]
+                counts[inds] += p
+                num += np.sum(p[:-1].flatten())
+                denom += np.sum(d[:-1].flatten() * p[:-1].flatten())
+
+            # Update alpha.
+            self.alpha = num / denom
+            print(self.alpha)
 
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
             print(np.sum(self.prob_fe))
 
-    def _alignment_prob(self, pair, nonull=False):
-        d = np.arange(len(pair[0]))[:, None] - np.arange(len(pair[1]))[None, :]
-        align_prob = np.exp(-self.alpha*np.abs(d)*len(pair[0])/len(pair[1]))
-        if nonull:
-            return align_prob/np.sum(align_prob, axis=0)[None, :]
+    def _alignment_prob(self, pair, get_deltas=False):
+        d = np.abs(np.arange(0.0, float(len(pair[0])), 1.0)[:, None]
+                   - np.arange(0.0, float(len(pair[1])), 1.0)[None, :])
+        d *= len(pair[0])/len(pair[1])
+        align_prob = np.exp(-self.alpha*d)
         nullprob = self.nullprob
         align_prob *= (1-nullprob)/np.sum(align_prob[:-1], axis=0)[None, :]
         align_prob[-1, :] = nullprob
+        if get_deltas:
+            return align_prob, d
         return align_prob
 
 
