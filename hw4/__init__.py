@@ -8,10 +8,11 @@ __all__ = []
 
 import os
 import random
+import argparse
 import numpy as np
 from glob import glob
 from collections import defaultdict
-from itertools import izip, izip_longest, product
+from itertools import izip, izip_longest
 
 NULL_TOKEN = "<NULL>"
 ALIGNMENT_TYPES = [None, "P", "S"]
@@ -117,6 +118,10 @@ def test(aligner, pairs):
     print("AER: {0}".format(1.0 - (prop_sure_count + prop_poss_count)
                             / (sure_count + prop_count)))
 
+    return (100*(prop_poss_count / prop_count),
+            100*(prop_sure_count / sure_count),
+            100*(1-(prop_sure_count+prop_poss_count)/(sure_count+prop_count)))
+
 
 def predict(aligner, pairs, fn):
     proposals = map(aligner.align, pairs)
@@ -180,7 +185,8 @@ class HeuristicWordAligner(BaselineWordAligner):
                      for ei, e in enumerate(pair[0])
                      if e in ce and f in cf]
             if not len(probs):
-                result.append((-1, fi))
+                result.append((fi if fi < len(pair[0]) else -1, fi))
+                # result.append((-1, fi))
                 continue
             result.append((max(probs, key=lambda o: o[1])[0], fi))
 
@@ -308,8 +314,7 @@ class IBMModel2Aligner(IBMModel1Aligner):
         return align_prob
 
 
-if __name__ == "__main__":
-    import argparse
+def run(cla):
     parser = argparse.ArgumentParser(
         description="Part of speech tagging.")
     parser.add_argument("-d", "--data", default="data",
@@ -324,7 +329,7 @@ if __name__ == "__main__":
                         help="The number of training sentences")
     parser.add_argument("-i", "--niter", type=int, default=40,
                         help="The number of EM iterations to run")
-    args = parser.parse_args()
+    args = parser.parse_args(cla)
 
     if args.test:
         validation_pairs = read_sentence_pairs("{0}/mini/mini"
@@ -358,9 +363,14 @@ if __name__ == "__main__":
     if args.verbose:
         map(aligner.render, validation_pairs)
 
-    # Compute the test statistics on the validation set.
-    test(aligner, validation_pairs)
-
     # Write the predictions.
     if not args.test:
         predict(aligner, test_pairs, "output.txt")
+
+    # Compute the test statistics on the validation set.
+    return test(aligner, validation_pairs)
+
+
+if __name__ == "__main__":
+    import sys
+    run(sys.argv[1:])

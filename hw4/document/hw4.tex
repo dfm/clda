@@ -54,6 +54,7 @@
 
 \newcommand{\data}{\mathcal{D}}
 \newcommand{\code}[1]{{\sffamily #1}}
+\DeclareMathOperator*{\argmax}{arg\,max}
 
 
 \begin{document}
@@ -65,6 +66,89 @@ To go much further than that, further optimizations would be necessary but
 this level seemed acceptable for this context.
 All of the code that I used for this assignment and the source code for this
 document is available on GitHub at \url{https://github.com/dfm/nlp}.
+
+\section{Introduction}
+
+The problem that we're trying to solve in this assignment is word alignment:
+given two sentences---one in French and one in English---what is the most
+probable set of correspondences between the words.
+More concretely, the mathematical quantity of interest is
+\begin{eqnarray}\eqlabel{prob}
+    p (\bvec{f},\,\bvec{a}\,|\,\bvec{e})\quad,
+\end{eqnarray}
+the joint probability of a French sentence $\bvec{f}$ (with $m$ words) and
+``alignment vector'' $\bvec{a}$ given the English sentence $\bvec{e}$ (with
+$l$ words).
+In particular, the test that we will implement is based on the maximum
+a posteriori alignment $\hat{\bvec{a}}$
+\begin{eqnarray}
+\hat{\bvec{a}} &=& \argmax_a p (\bvec{f},\,\bvec{a}\,|\,\bvec{e}) \quad.
+\end{eqnarray}
+This quantity is used in machine translation because in that problem, you
+would want to train a model for
+\begin{eqnarray}
+p(\bvec{e}\,|\,\bvec{f}) &\propto&
+    p(\bvec{e})\,p(\bvec{f}\,|\,\bvec{e}) \nonumber\\
+    &=& p(\bvec{e})\,
+        \sum_a p (\bvec{f},\,\bvec{a}\,|\,\bvec{e}) \quad.
+\end{eqnarray}
+The \emph{alignment vector} $\bvec{a}$ is a list of integers (of length $m$)
+that map positions in $\bvec{f}$ to positions in $\bvec{e}$.
+For example, \fig{blue-house} shows two possible alignments between the
+sentences $\bvec{e} = blue_1\,house_2$ and
+$\bvec{f} = la_1\,maison_2\,bleu_3$.
+The left panel shows the alignment associated with the vector
+$\bvec{a} = \{-1,\,1,\,2\}$ and the right panel shows $\bvec{a} =
+\{-1,\,2,\,1\}$ where $a_i=-1$ indicates the \code{NULL} alignment.
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics{fig1.pdf}
+\end{center}
+\caption{%
+An example of the possible alignment vectors in a simple sentence pair.
+The top line gives the English sentence and the bottom is the French and the
+edges indicate the alignment.
+\figlabel{blue-house}}
+\end{figure}
+
+In this assignment, I'll implement three learning algorithms for \eq{prob}
+based on three different sets of independence assumptions.
+The first model is based on very simple word-level heuristics and the
+following two are the two simplest probabilistic generative models from
+\citet{ibm}.
+
+\section{Evaluating Performance}
+
+\section{Baseline Model}
+
+The baseline model is a diagonal alignment $\hat{\bvec{a}} = \{a_i =
+i,\,\mathrm{for}\,i=1,\,\cdots,\,m\}$.
+For comparison, this model achieves a precision of 33.5\%, a recall of 19.8\%
+and an AER of 71.2\% on the provided validation set.
+We can also run this model on the provided \code{miniTest} dataset and find a
+precision and recall of 88.9\% and an AER of 11.1\%.
+
+\section{Heuristic Model}
+
+The first more sophisticated model that we were to implement is a model based
+on some sort of word-level heuristics.
+I chose to use word co-occurrence rates as the heuristic.
+In practice, this means that
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    \prod_{i=1}^m \frac{c(f_i,\,e_{a_i})}{c(f_i)\,c(e_{a_i})} \quad.
+\end{eqnarray}
+where $c(f_i,\,e_{a_i})$ is the number of times that both $f_i$ and $e_{a_i}$
+appear together in a sentence pair and $c(f_i)$ and $c(e_{a_i})$ are the
+total number of times that $f_i$ and $e_{a_i}$, respectively, appear in the
+training data.
+The only complication in this model comes when an unknown French word appears.
+I chose to deal with this by falling back on the baseline (diagonal) alignment
+for these unknown words.
+
+On the \code{miniTest}, this model gives a precision of 81.8\%, a perfect
+recall and an AER of 10\%.
 
 \begin{thebibliography}{}\raggedright
 
