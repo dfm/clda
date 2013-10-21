@@ -149,6 +149,48 @@ for these unknown words.
 
 On the \code{miniTest}, this model gives a precision of 81.8\%, a perfect
 recall and an AER of 10\%.
+For the validation data, the results (as a function of the number of training
+sentence pairs used) are shown in Table~\ref{tab:heuristic} and
+\fig{heuristic}.
+Given the extreme simplicity and ease of training (even with 500k training
+sentences the model trained in less than a minute on my basic MacBook Pro),
+the minimum AER of 35.0\% using 500k training examples seems pretty impressive.
+It's also interesting to note how drastically the results improve as more data
+are used to train.
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{c ccc}
+\toprule
+$N_\mathrm{train}$ & precision [\%] & recall [\%] & AER [\%] \\\midrule
+500 & 37.553 & 42.012 & 60.999 \\
+1000 & 39.403 & 43.787 & 59.174 \\
+5000 & 45.594 & 54.438 & 51.567 \\
+10000 & 47.838 & 59.763 & 48.341 \\
+100000 & 57.778 & 71.006 & 37.996 \\
+500000 & 61.165 & 73.077 & 35.033 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance the heuristic word-alignment model on the validation dataset
+as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
+\label{tab:heuristic}}
+\end{table}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.5\textwidth]{heuristic.pdf}
+\end{center}
+\caption{%
+The performance the heuristic word-alignment model on the validation dataset
+as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
+The top panel shows the precision (solid line) and the recall (dashed line)
+and the bottom panel shows the AER.
+\figlabel{heuristic}}
+\end{figure}
+
+\section{IBM Model 1}
 
 \begin{thebibliography}{}\raggedright
 
