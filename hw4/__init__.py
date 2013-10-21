@@ -11,7 +11,7 @@ import random
 import numpy as np
 from glob import glob
 from collections import defaultdict
-from itertools import izip, izip_longest, product
+from itertools import izip, izip_longest
 
 NULL_TOKEN = "<NULL>"
 ALIGNMENT_TYPES = [None, "P", "S"]
@@ -189,7 +189,7 @@ class HeuristicWordAligner(BaselineWordAligner):
 
 class IBMModel1Aligner(BaselineWordAligner):
 
-    def __init__(self, nullprob=0.2):
+    def __init__(self, nullprob=0.1):
         self.nullprob = nullprob
 
     def train(self, pairs, niter=40):
@@ -238,11 +238,11 @@ class IBMModel1Aligner(BaselineWordAligner):
 
     def _get_rel_post(self, pair):
         align_prob = self._alignment_prob(pair)
-
         # Compute the (relative) posterior probabilities for all
         # possible alignments.
         inds = (pair[0][:, None], pair[1][None, :])
-        return self.prob_fe[inds] * align_prob, inds
+        p = self.prob_fe[inds]
+        return p * align_prob, inds
 
     def align(self, pair):
         en_inds = np.array([self.vocab_en.get(w.lower(), -1)
@@ -272,6 +272,7 @@ class IBMModel2Aligner(IBMModel1Aligner):
             print("EM iteration {0}...".format(i))
             counts = np.zeros_like(self.prob_fe)
             num, denom = 0.0, 0.0
+            perplex = 0.0
             for pair in pairs:
                 align_prob, d = self._alignment_prob(pair, True)
                 inds = (pair[0][:, None], pair[1][None, :])
@@ -280,17 +281,18 @@ class IBMModel2Aligner(IBMModel1Aligner):
                     print("skipping")
                     continue
                 p /= np.sum(p, axis=1)[:, None]
+                perplex -= np.sum(np.log2(np.sum(p, axis=0)))
+
                 counts[inds] += p
                 num += np.sum(p[:-1])
                 denom += np.sum(d[:-1] * p[:-1])
 
             # Update alpha.
             self.alpha = num / denom
-            print(self.alpha)
+            print(self.alpha, perplex)
 
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
-            print(np.sum(self.prob_fe))
 
     def _alignment_prob(self, pair, get_deltas=False):
         d = np.abs(np.arange(0.0, float(len(pair[0])), 1.0)[:, None]
@@ -309,11 +311,16 @@ class IBMModel2Aligner(IBMModel1Aligner):
 
 
 if __name__ == "__main__":
+    np.random.seed(123)
+    random.seed(123)
+
     import argparse
     parser = argparse.ArgumentParser(
         description="Part of speech tagging.")
     parser.add_argument("-d", "--data", default="data",
                         help="The base path for the data files.")
+    parser.add_argument("-o", "--output", default="output",
+                        help="The output directory")
     parser.add_argument("--model", default="baseline",
                         help="The alignment model to use")
     parser.add_argument("--test", action="store_true",
@@ -324,7 +331,16 @@ if __name__ == "__main__":
                         help="The number of training sentences")
     parser.add_argument("-i", "--niter", type=int, default=40,
                         help="The number of EM iterations to run")
+    parser.add_argument("-a", "--alpha", type=float, default=0.3,
+                        help="The initial value of alpha")
+    parser.add_argument("--null", type=float, default=0.1,
+                        help="The null probability")
     args = parser.parse_args()
+
+    try:
+        os.makedirs(args.output)
+    except os.error:
+        print("Directory '{0}' already exists".format(args.output))
 
     if args.test:
         validation_pairs = read_sentence_pairs("{0}/mini/mini"
@@ -347,9 +363,9 @@ if __name__ == "__main__":
     if args.model.lower() == "heuristic":
         aligner = HeuristicWordAligner()
     elif args.model.lower() == "model1":
-        aligner = IBMModel1Aligner()
+        aligner = IBMModel1Aligner(nullprob=args.null)
     elif args.model.lower() == "model2":
-        aligner = IBMModel2Aligner(0.3)
+        aligner = IBMModel2Aligner(args.alpha, nullprob=args.null)
 
     print("Training word alignment model.")
     aligner.train(training_pairs, niter=args.niter)
@@ -363,4 +379,4 @@ if __name__ == "__main__":
 
     # Write the predictions.
     if not args.test:
-        predict(aligner, test_pairs, "output.txt")
+        predict(aligner, test_pairs, os.path.join(args.output, "output.txt"))
