@@ -257,10 +257,9 @@ class IBMModel1Aligner(BaselineWordAligner):
 
     def _get_rel_post(self, pair):
         align_prob = self._alignment_prob(pair)
-        # Compute the (relative) posterior probabilities for all
-        # possible alignments.
         inds = (pair[0][:, None], pair[1][None, :])
         p = self.prob_fe[inds]
+        p[:, pair[1] < 0] = 1.0
         return p * align_prob, inds
 
     def align(self, pair):
@@ -330,9 +329,6 @@ class IBMModel2Aligner(IBMModel1Aligner):
         d *= len(pair[0])/len(pair[1])
         align_prob = np.exp(-self.alpha*d)
         nullprob = self.nullprob
-        if np.any(np.sum(align_prob[:-1], axis=0) == 0):
-            print(align_prob)
-            assert 0
         align_prob *= (1-nullprob)/np.sum(align_prob[:-1], axis=0)[None, :]
         align_prob[-1, :] = nullprob
         if get_deltas:
