@@ -192,6 +192,81 @@ and the bottom panel shows the AER.
 
 \section{IBM Model 1}
 
+The next two models that I will consider rely on a particular factorization of
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{c ccc}
+\toprule
+$N_\mathrm{train}$ & precision [\%] & recall [\%] & AER [\%] \\\midrule
+500 & 35.098 & 35.799 & 64.665 \\
+1000 & 38.427 & 41.420 & 60.573 \\
+5000 & 52.000 & 55.030 & 46.964 \\
+10000 & 55.522 & 58.876 & 43.343 \\
+100000 & 60.602 & 63.314 & 38.485 \\
+500000 & 64.363 & 67.160 & 34.681 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance IBM Model 1 on the validation dataset
+as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
+\label{tab:model1}}
+\end{table}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.5\textwidth]{model1.pdf}
+\end{center}
+\caption{%
+\figlabel{model1}}
+\end{figure}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.5\textwidth]{model1_convergence.pdf}
+\end{center}
+\caption{%
+\figlabel{model1-convergence}}
+\end{figure}
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{c ccc}
+\toprule
+$N_\mathrm{train}$ & precision [\%] & recall [\%] & AER [\%] \\\midrule
+500 & 48.451 & 56.805 & 48.855 \\
+1000 & 55.603 & 65.385 & 41.199 \\
+5000 & 63.329 & 76.923 & 32.283 \\
+10000 & 65.678 & 78.698 & 30.115 \\
+100000 & 69.448 & 81.953 & 26.507 \\
+200000 & 71.469 & 84.024 & 24.474 \\
+500000 & 73.371 & 84.320 & 23.084 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The performance IBM Model 2 on the validation dataset
+as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
+\label{tab:model2}}
+\end{table}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.5\textwidth]{model2.pdf}
+\end{center}
+\caption{%
+\figlabel{model2}}
+\end{figure}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.5\textwidth]{model2_convergence.pdf}
+\end{center}
+\caption{%
+\figlabel{model2-convergence}}
+\end{figure}
+
 \begin{thebibliography}{}\raggedright
 
 \bibitem[Brown \etal(1993)]{ibm}
