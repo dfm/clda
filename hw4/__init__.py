@@ -198,7 +198,7 @@ class IBMModel1Aligner(BaselineWordAligner):
     def __init__(self, nullprob=0.1):
         self.nullprob = nullprob
 
-    def train(self, pairs, niter=40):
+    def train(self, pairs, niter=40, **kwargs):
         # Figure out the vocabularies.
         self.vocab_en = defaultdict(lambda: len(self.vocab_en))
         self.vocab_fr = defaultdict(lambda: len(self.vocab_fr))
@@ -215,23 +215,36 @@ class IBMModel1Aligner(BaselineWordAligner):
         self.vocab_en = dict(self.vocab_en)
         self.vocab_fr = dict(self.vocab_fr)
 
-        self.run_em(index_pairs, niter)
+        self.run_em(index_pairs, niter, **kwargs)
 
-    def run_em(self, pairs, niter):
+    def run_em(self, pairs, niter, validation_set=None, output=None):
+        if output is not None:
+            open(output, "w").close()
+
         # Initialize the p(f | e) as a uniform distribution.
         self.prob_fe = np.ones((len(self.vocab_en), len(self.vocab_fr)))
         self.prob_fe /= np.sum(self.prob_fe, axis=1)[:, None]
+        results = []
         for i in range(niter):
             print("EM iteration {0}...".format(i))
             counts = np.zeros_like(self.prob_fe)
             for pair in pairs:
+                align_prob = self._alignment_prob(pair)
                 inds = (pair[0][:, None], pair[1][None, :])
-                counts[inds] += (self.prob_fe[inds]
-                                 / np.sum(self.prob_fe[inds], axis=1)[:, None])
+                p = align_prob * self.prob_fe[inds]
+                p /= np.sum(p, axis=1)[:, None]
+                counts[inds] += p
 
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
-            print(np.sum(self.prob_fe))
+            if validation_set is not None:
+                r = test(self, validation_set)
+                results.append(r)
+                if output is not None:
+                    open(output, "a").write("{0:d} {1:e} {2:e} {3:e}\n"
+                                            .format(i, *r))
+
+        return results
 
     def _alignment_prob(self, pair):
         # Compute the alignment probability (uniform).
@@ -270,10 +283,14 @@ class IBMModel2Aligner(IBMModel1Aligner):
         super(IBMModel2Aligner, self).__init__(*args, **kwargs)
         self.alpha = alpha
 
-    def run_em(self, pairs, niter):
+    def run_em(self, pairs, niter, validation_set=None, output=None):
+        if output is not None:
+            open(output, "w").close()
+
         # Initialize the p(f | e) as a uniform distribution.
         self.prob_fe = np.ones((len(self.vocab_en), len(self.vocab_fr)))
         self.prob_fe /= np.sum(self.prob_fe, axis=1)[:, None]
+        results = []
         for i in range(niter):
             print("EM iteration {0}...".format(i))
             counts = np.zeros_like(self.prob_fe)
@@ -296,6 +313,13 @@ class IBMModel2Aligner(IBMModel1Aligner):
             # Update alpha.
             self.alpha = num / denom
             print(self.alpha, perplex)
+
+            if validation_set is not None:
+                r = test(self, validation_set)
+                results.append(r)
+                if output is not None:
+                    open(output, "a").write("{0:d} {1:e} {2:e} {3:e} {4:e}\n"
+                                            .format(i, self.alpha, *r))
 
             # Normalize the counts to get the ML pair probabilities.
             self.prob_fe = counts / np.sum(counts, axis=1)[:, None]
@@ -370,7 +394,9 @@ def run(cla):
         aligner = IBMModel2Aligner(args.alpha, nullprob=args.null)
 
     print("Training word alignment model.")
-    aligner.train(training_pairs, niter=args.niter)
+    aligner.train(training_pairs, niter=args.niter,
+                  validation_set=validation_pairs,
+                  output=os.path.join(args.output, "em.txt"))
 
     # Render the alignments.
     if args.verbose:
