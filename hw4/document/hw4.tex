@@ -192,7 +192,45 @@ and the bottom panel shows the AER.
 
 \section{IBM Model 1}
 
-The next two models that I will consider rely on a particular factorization of
+The next two models that I will consider are the first two models presented by
+\citet{ibm}.
+Both start from a particular factorization of \eq{prob}
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    p(m\,|\,\bvec{e}) \, \prod_{i=0}^m p(a_i\,|\,m,\,l)\,p(f_i\,|\,e_{a_i})
+    \quad.
+\end{eqnarray}
+Note that this equation is \emph{not} as general as \eq{prob}.
+In particular, the main independence assumptions that go into this
+factorization are that (a) the alignment probabilities are conditionally
+independent given (only) the sentence lengths and (b) the translation
+probabilities for each word pair are independent of the other words in the
+sentence.
+These are clearly brutal assumptions (especially given what we've learned
+already in this course) but they do make the problem tractable.
+We'll actually go one step further \citep[following][]{ibm} and assume the
+prior probability on the French sentence length is a small (irrelevant)
+constant $p(m\,|\,\bvec{e}) \equiv \epsilon$.
+For \emph{Model 1}, we'll make the further assumption that the alignment
+probabilities are uniform across the whole sentence
+\begin{eqnarray}
+p(a_i\,|\,m,\,l) &=& \frac{1}{1+l} \quad.
+\end{eqnarray}
+With these assumptions, the probabilistic model that we want to learn is
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    \frac{\epsilon}{1+l}\,\prod_i p(f_i\,|\,e_{a_i}) \quad.
+\end{eqnarray}
+In practice, we learn a mixture model that includes a (constant) prior
+probability $P_\mathrm{null}$ of aligning the French word $f_i$ with the
+\code{NULL} token giving
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    \epsilon \,\left [\frac{1-P_\mathrm{null}}{1+l}\,\prod_ip(f_i\,|\,e_{a_i})
+    + P_\mathrm{null}\,\prod_i p(f_i\,|\,\mathrm{NULL}) \right ] \quad.
+\end{eqnarray}
+
+
 
 \begin{table}[htbp]
 \begin{center}
