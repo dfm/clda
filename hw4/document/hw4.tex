@@ -192,7 +192,48 @@ and the bottom panel shows the AER.
 
 \section{IBM Model 1}
 
-The next two models that I will consider rely on a particular factorization of
+The next two models that I will consider are the first two models presented by
+\citet{ibm}.
+Both start from a particular factorization of \eq{prob}
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    p(m\,|\,\bvec{e}) \, \prod_{i=0}^m p(a_i\,|\,m,\,l)\,p(f_i\,|\,e_{a_i})
+    \quad.
+\end{eqnarray}
+Note that this equation is \emph{not} as general as \eq{prob}.
+In particular, the main independence assumptions that go into this
+factorization are that (a) the alignment probabilities are conditionally
+independent given (only) the sentence lengths and (b) the translation
+probabilities for each word pair are independent of the other words in the
+sentence.
+These are clearly brutal assumptions (especially given what we've learned
+already in this course) but they do make the problem tractable.
+We'll actually go one step further \citep[following][]{ibm} and assume the
+prior probability on the French sentence length is a small (irrelevant)
+constant $p(m\,|\,\bvec{e}) \equiv \epsilon$.
+For \emph{Model 1}, we'll make the further assumption that the alignment
+probabilities are uniform across the whole sentence
+\begin{eqnarray}
+p(a_i\,|\,m,\,l) &=& \frac{1}{1+l} \quad.
+\end{eqnarray}
+With these assumptions, the probabilistic model that we want to learn is
+\begin{eqnarray}
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+    \frac{\epsilon}{1+l}\,\prod_i p(f_i\,|\,e_{a_i}) \quad.
+\end{eqnarray}
+In practice, I included the \code{NULL} token in each English sentence and
+special cased the alignment to that position to have a constant prior
+probability $P_\mathrm{NULL}$ of alignment.
+I chose to set this to $P_\mathrm{NULL}$ using a not particularly scientific
+set of experiments but the results don't seem to be very sensitive to this
+value.
+Under this model, the parameters $p(f_i\,|\,e_j)$ and
+$p(f_i\,|\,\mathrm{NULL})$ can be learned using expectation maximization.
+The steps are roughly as follows:
+\begin{enumerate}
+\item{Initialize the distribution}
+\end{enumerate}
+
 
 \begin{table}[htbp]
 \begin{center}
