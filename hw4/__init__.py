@@ -186,7 +186,6 @@ class HeuristicWordAligner(BaselineWordAligner):
                      if e in ce and f in cf]
             if not len(probs):
                 result.append((fi if fi < len(pair[0]) else -1, fi))
-                # result.append((-1, fi))
                 continue
             result.append((max(probs, key=lambda o: o[1])[0], fi))
 
