@@ -10,7 +10,7 @@
 
 \usepackage{listings}
 \usepackage{color}
-\lstset{language=Python,
+\lstset{%
         basicstyle=\footnotesize\ttfamily,
         showspaces=false,
         showstringspaces=false,
@@ -117,8 +117,6 @@ based on three different sets of independence assumptions.
 The first model is based on very simple word-level heuristics and the
 following two are the two simplest probabilistic generative models from
 \citet{ibm}.
-
-\section{Evaluating Performance}
 
 \section{Baseline Model}
 
@@ -228,12 +226,40 @@ I chose to set this to $P_\mathrm{NULL}$ using a not particularly scientific
 set of experiments but the results don't seem to be very sensitive to this
 value.
 Under this model, the parameters $p(f_i\,|\,e_j)$ and
-$p(f_i\,|\,\mathrm{NULL})$ can be learned using expectation maximization.
-The steps are roughly as follows:
+$p(f_i\,|\,\mathrm{NULL})$ can be learned using expectation maximization (EM).
+The steps are as follows:
 \begin{enumerate}
-\item{Initialize the distribution}
+\item{initialize the parameters uniformly,}
+\item{\emph{expectation}: using the current settings of the parameters,
+      compute the posterior probabilities
+      $p(\bvec{a}\,|\,\bvec{f},\,\bvec{e})$ for each sentence pair,}
+\item{\emph{maximization}: find the maximum likelihood values for the
+      parameters $p(f_i\,|\,e_j)$ using the estimated posteriors
+      from the previous step.}
 \end{enumerate}
+In practice, this last step simply involves summing the effective
+counts---weighted by the posterior probabilities---for each word pair and
+normalizing properly.
 
+Running this model on the \code{miniTest} dataset for about 3 iterations of
+EM converges quickly leaving only the following error:
+\begin{lstlisting}
+    [#]   | U
+     # [ ]| V
+     #    | W
+    ------'
+     D  F
+\end{lstlisting}
+The performance of this model on the validation data as a function of training
+set size is shown in Table~\ref{tab:model1} and plotted in \fig{model1}.
+For each of these experiments, 10 iterations of EM were used.
+\Fig{model1-convergence} shows the performance of this model on the validation
+data as a function of the number of iterations of EM.
+Interestingly, the best predictions are made after only one step of EM despite
+the fact that the likelihood of the model is improving on the training data.
+This effect is probably due to over-fitting.
+The model has a very large number of parameters and no regularization or prior
+on them to ensure reasonable values.
 
 \begin{table}[htbp]
 \begin{center}
@@ -250,8 +276,7 @@ $N_\mathrm{train}$ & precision [\%] & recall [\%] & AER [\%] \\\midrule
 \end{tabular}
 \end{center}
 \caption{%
-The performance IBM Model 1 on the validation dataset
-as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
+The same as Table~\ref{tab:heuristic} but using \emph{Model 1}.
 \label{tab:model1}}
 \end{table}
 
@@ -260,6 +285,7 @@ as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
     \includegraphics[width=0.5\textwidth]{model1.pdf}
 \end{center}
 \caption{%
+The same as \fig{heuristic} but using \emph{Model 1}.
 \figlabel{model1}}
 \end{figure}
 
@@ -268,8 +294,107 @@ as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
     \includegraphics[width=0.5\textwidth]{model1_convergence.pdf}
 \end{center}
 \caption{%
+The performance of \emph{Model 1} (using 500k training sentence pairs) as a
+function of the number of EM iterations.
+The top panel shows the precision (solid line) and the recall (dashed line)
+and the bottom panel shows the AER.
 \figlabel{model1-convergence}}
 \end{figure}
+
+\section{IBM Model 2}
+
+The second probabilistic model introduces a parametrized alignment probability
+function to apply prior linguistic knowledge and, as a result, regularize the
+parameters from the previous model.
+As suggested in the assignment, I decided to model the alignment probability
+using the Laplace distribution
+\begin{eqnarray}\eqlabel{model2-prob}
+p(a_i\,|\,m,\,l) &\propto& \exp \left ( -\alpha\,\frac{l}{m} \,
+                                        \left | i - a_i \right | \right )
+        \quad.
+\end{eqnarray}
+I also tried a Gaussian but the results weren't quite as good so I won't
+discuss them much here.
+I think that the main problem with the Gaussian is that there isn't enough
+support in the wings to allow for larger jumps in alignment (even though these
+can happen).
+As a result, it might be interesting to try a distribution with heavier tails.
+
+Most of the learning procedure from the previous section carries over to this
+model.
+The first difference is that the posterior probabilities for $\bvec{a}$ must
+be computed including the term from \eq{model2-prob}.
+Secondly, the \emph{maximization} step must also include an update to the
+parameter $\alpha$.
+Since \eq{model2-prob} is the well known Laplace distribution, the maximum
+likelihood value for $\alpha$ is simply
+\begin{eqnarray}
+\frac{1}{\hat{\alpha}} &=& \frac{\displaystyle{\sum_k w_k \, \frac{l_k\,| i-a_i
+    |_k}{m_k}}}{\displaystyle{\sum_k w_k}}
+\end{eqnarray}
+where the sums are over all possibly aligned pairs and $w_k =
+p(a_i\,|\,m,\,l)\,p(f_i\,|\,e_{a_i})$.
+This update is trivial to compute given the results needed to update the word
+translation probabilities.
+In all of the following examples, I initialized $\alpha$ as 0.3.
+
+We still have the problem that when we encounter new French words, the
+probability function will be zero and any alignment will be rejected.
+Once again, I fall back on the alignment only model (which becomes exactly
+the baseline diagonal model in this case) and align the word based on just
+that.
+It seems like it would probably be helpful to include some sort of unknown
+word model that compares features of the different words to produce a
+probability of alignment.
+This would probably work well for English and French where many words have
+similarities in both languages.
+
+Running this model on \code{miniTest} gives a near perfect solution (with a
+slightly sub-optimal precision because of the final block:
+\begin{lstlisting}
+    [#]   | U
+       [#]| V
+        # | W
+    ------'
+     D  F
+\end{lstlisting}
+When converged, this model found a maximum likelihood value of $\alpha=6.0$.
+
+The results of this model are also substantially better when tested on the
+validation set.
+Table~\ref{tab:model2} shows the performance as a function of the number of
+training samples and these data are plotted in \fig{model2}.
+\Fig{model2-convergence} shows the validation performance as a function of the
+number of iterations of EM.
+In an earlier test, I found that the validation performance began to get worse
+after $\sim 5$ iterations so I decided to stop after 5 for this example.
+In fact, the best performance appears after 4 iterations (with an AER of
+22.8\%) and then gets worse (AER of 23.0\% after 5 iterations).
+This behavior is more consistent with my expectations.
+It doesn't converge immediately after one step because of the regularization
+and then it converges to a much better solution than \emph{Model 1} (without
+over-fitting) because of the model is less flexible in exactly the right
+direction.
+
+\paragraph{Remaining errors}
+Unfortunately my final model doesn't manage to reach an AER of $<20\%$ on
+either the validation set or the test set even when a substantial fraction of
+the training sentences are used.
+I even tried running with the full set of training examples for a few
+iterations of EM (this took quite a while) and found only a marginal
+improvement over the 500k sentences.
+There are a few reasons why this might happen.
+First, this might be due to numerical effects; there are a few places in the
+code where I'm using probabilities when I should be using log-probabilities.
+This is a pretty silly mistake and it seems a likely cause of
+trouble---especially when considering rare words.
+Second, there are two tuning parameters that I haven't really discussed at
+all: (1) the prior probability on the \code{NULL} alignment and (2) the
+initial value of $\alpha$.
+I don't think that these should be a problem based on some experimentation.
+Furthermore, I think (without proof) that the objective function should be
+convex like \emph{Model 1} so the initial values of the parameters shouldn't
+matter unless there's a bug in the code.
 
 \begin{table}[htbp]
 \begin{center}
@@ -297,6 +422,7 @@ as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
     \includegraphics[width=0.5\textwidth]{model2.pdf}
 \end{center}
 \caption{%
+The same as \fig{heuristic} but using \emph{Model 2}.
 \figlabel{model2}}
 \end{figure}
 
@@ -305,6 +431,8 @@ as a function of the number $N_\mathrm{train}$ of training sentence pairs used.
     \includegraphics[width=0.5\textwidth]{model2_convergence.pdf}
 \end{center}
 \caption{%
+The same as \fig{model2-convergence} but using \emph{Model 2}.
+The bottom panel here shows the value of $\alpha$ at each step.
 \figlabel{model2-convergence}}
 \end{figure}
 
