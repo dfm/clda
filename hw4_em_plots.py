@@ -45,9 +45,9 @@ def em_plot(root):
         axes[2].set_ylabel(r"$\alpha$")
         axes[2].set_ylim(0.3, 0.35)
 
-        axes[2].set_xlabel("$\log_{10}\,N_\mathrm{iter}$")
+        axes[2].set_xlabel("$N_\mathrm{iter}$")
     else:
-        axes[1].set_xlabel("$\log_{10}\,N_\mathrm{iter}$")
+        axes[1].set_xlabel("$N_\mathrm{iter}$")
 
     fig.savefig(os.path.join(root, "convergence.pdf"))
 
