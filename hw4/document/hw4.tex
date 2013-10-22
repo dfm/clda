@@ -61,7 +61,7 @@
 
 I implemented this assignment in pure Python (using extensive use of NumPy for
 vectorized operations) and, as you'll see below, I was able to scale the
-training to about 250k training sentences.
+training to about 500k training sentences.
 To go much further than that, further optimizations would be necessary but
 this level seemed acceptable for this context.
 All of the code that I used for this assignment and the source code for this
@@ -134,7 +134,7 @@ on some sort of word-level heuristics.
 I chose to use word co-occurrence rates as the heuristic.
 In practice, this means that
 \begin{eqnarray}
-p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &=&
+p(\bvec{f},\,\bvec{a}\,|\,\bvec{e}) &\propto&
     \prod_{i=1}^m \frac{c(f_i,\,e_{a_i})}{c(f_i)\,c(e_{a_i})} \quad.
 \end{eqnarray}
 where $c(f_i,\,e_{a_i})$ is the number of times that both $f_i$ and $e_{a_i}$
