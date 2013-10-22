@@ -41,8 +41,9 @@ def em_plot(root):
         axes[1].set_xticklabels([])
 
         axes[2].plot(niter, data[:, 1], "k")
-        axes[2].yaxis.set_major_locator(MaxNLocator(4))
+        axes[2].yaxis.set_major_locator(MaxNLocator(3))
         axes[2].set_ylabel(r"$\alpha$")
+        axes[2].set_ylim(0.3, 0.35)
 
         axes[2].set_xlabel("$\log_{10}\,N_\mathrm{iter}$")
     else:
