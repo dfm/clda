@@ -4,7 +4,7 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = []
+__all__ = ["parse_linkouts"]
 
 import re
 
@@ -65,7 +65,6 @@ def parse_linkouts(fn):
                 if len(p_pref.findall(i)):
                     final[article_id] = i
                     break
-
     return final
 
 
