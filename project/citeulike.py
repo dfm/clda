@@ -7,6 +7,7 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = ["parse_linkouts"]
 
 import re
+from collections import defaultdict
 
 
 p = re.compile(r"([0-9]{4}\.[0-9]{4})"
@@ -68,5 +69,22 @@ def parse_linkouts(fn):
     return final
 
 
+def parse_users(fn, linkouts):
+    users = defaultdict(list)
+    count = 0
+    for line in open(fn):
+        cols = line.split("|")
+        linkout, user = cols[0], cols[1]
+        if linkout in linkouts:
+            count += 1
+            users[user].append(linkouts[linkout])
+    return users, count
+
+
 if __name__ == "__main__":
-    parse_linkouts("citeulike/arxiv")
+    linkouts = parse_linkouts("citeulike/arxiv")
+    print("{0} unique articles.".format(len(set(linkouts.values()))))
+
+    users, count = parse_users("citeulike/current", linkouts)
+    print("{0} unique users".format(len(users)))
+    print("{0} user-article pairs".format(count))
