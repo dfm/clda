@@ -6,16 +6,20 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = []
 
-from math import log
+from math import exp, log
 from collections import defaultdict
 
+import nltk
 from nltk.corpus.reader import BracketParseCorpusReader
 
 
 class Counter(defaultdict):
 
-    def normalize(self):
-        norm = log(sum(self.values()))
+    def normalize(self, norm=None):
+        if norm is None:
+            norm = log(sum(self.values()))
+        else:
+            norm = log(norm)
         [self.__setitem__(k, log(v) - norm) for k, v in self.items()]
 
 
@@ -25,7 +29,7 @@ class Parser(object):
         self.grammar = grammar
         self.lexicon = lexicon
 
-    def generate_parse_tree(self, sentence):
+    def generate_parse_tree(self, sentence, root_tag="S"):
         n = len(sentence)
         score = [[defaultdict(float) for j in range(n-k)] for k in range(n)]
         back = [[defaultdict(float) for j in range(n-k)] for k in range(n)]
@@ -36,13 +40,43 @@ class Parser(object):
                 s = self.lexicon.score(w, t)
                 if s is not None:
                     score[i][0][t] = s
-                    back[i][0][t] = (i, 0, w)
+                    back[i][0][t] = [(i, 0, w, True)]
 
         # Initial unary pass.
         for i, w in enumerate(sentence):
             self.update_unaries(sentence, i, 0, score, back)
 
-        print(score)
+        # Larger phrases.
+        for span in range(0, n):
+            for begin in range(n-span-1):
+                end = span+1
+                for split in range(span+1):
+                    l = score[begin][split]
+                    r = score[begin+split+1][span-split]
+                    for parent, rule in self.grammar.binaries.items():
+                        for children, prob in rule.items():
+                            lc, rc = children.split()
+                            if lc in l and rc in r:
+                                p = l[lc] + r[rc] + prob
+                                if (parent not in score[begin][end]
+                                        or p > score[begin][end][parent]):
+                                    score[begin][end][parent] = p
+                                    back[begin][end][parent] = [
+                                        (begin, split, lc, False),
+                                        (begin+split+1, span-split, rc, False)
+                                    ]
+
+                # Update the unaries.
+                self.update_unaries(sentence, begin, end, score, back)
+
+        # Check to make sure that this is a valid parse.
+        if root_tag not in score[0][-1]:
+            raise RuntimeError("Invalid parse")
+
+        # Build the tree using the backpointers.
+        root = back[0][-1][root_tag]
+        tree = nltk.Tree(root_tag, [self.build_tree(back, r) for r in root])
+        return tree
 
     def update_unaries(self, sentence, start, end, score, back):
         dist = score[start][end]
@@ -56,30 +90,16 @@ class Parser(object):
                         if parent not in dist or p > dist[parent]:
                             added = True
                             dist[parent] = p
-                            back[start][end][parent] = (start, end, child)
+                            back[start][end][parent] = [
+                                (start, end, child, False)
+                            ]
 
-        # assert 0
-
-        # for i, w in enumerate(sentence):
-        #     for t in self.lexicon.tags:
-        #         tableau[i][0][t] = (self.lexicon.score(w, t), [w])
-
-        # for span in range(1, n):
-        #     for begin in range(0, n-span):
-        #         end = begin + span
-        #         for split in range(begin+1, end):
-        #             left = tableau[begin][split]
-        #             right = tableau[split][end]
-        #             for top, rules in self.grammar.binaries.items():
-        #                 for rule, prob in rules.items():
-        #                     B, C = rule.rhs()
-        #                     if B not in left and C not in right:
-        #                         continue
-        #                     p = left[B][0] * right[C][0] * prob
-        #                     if p > tableau[begin][end][top][0]:
-        #                         tableau[begin][end][top] = (p, rule)
-
-        # return tableau
+    def build_tree(self, back, coords):
+        ix, iy, name, is_terminal = coords
+        if is_terminal:
+            return name
+        nodes = back[ix][iy][name]
+        return nltk.Tree(name, [self.build_tree(back, n) for n in nodes])
 
 
 class MiniGrammar(object):
@@ -94,8 +114,8 @@ class MiniGrammar(object):
             else:
                 self.binaries[l][r] += p
 
-        [self.unaries[k].normalize() for k in self.unaries]
-        [self.binaries[k].normalize() for k in self.binaries]
+        [self.unaries[k].normalize(1) for k in self.unaries]
+        [self.binaries[k].normalize(1) for k in self.binaries]
 
 
 class Grammar(object):
@@ -236,4 +256,4 @@ if __name__ == "__main__":
 
     if args.mini:
         tree = parser.generate_parse_tree(["fish", "people", "fish", "tanks"])
-        print(tree)
+        tree.draw()
