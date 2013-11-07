@@ -70,7 +70,7 @@ parser = hw5.Parser(grammar, lexicon)
 
 if args.mini:
     tree = parser.generate_parse_tree(["fish", "people", "fish", "tanks"],
-                                      root_tag="S")
+                                      root_tag="S", theta=args.theta)
     tree.draw()
 
 else:

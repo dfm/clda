@@ -41,7 +41,7 @@ void sparse_free (sparse *self)
 
 void update_unaries (int n, int ntags, int start, int end,
                      sparse **unaries, double *score, PyObject **back,
-                     double theta)
+                     double theta, int prune)
 {
     double value, prob, p, tmp, max_score = -INFINITY;
     int i, child, parent, added = 1, ind = (start*n+end)*ntags, ip;
@@ -75,9 +75,10 @@ void update_unaries (int n, int ntags, int start, int end,
     }
 
     // Pruning.
-    for (parent = 0; parent < ntags; ++parent)
-        if (score[ind+parent] < max_score - theta)
-            score[ind+parent] = 1.0;
+    if (prune)
+        for (parent = 0; parent < ntags; ++parent)
+            if (score[ind+parent] < max_score - theta)
+                score[ind+parent] = 1.0;
 }
 
 static PyObject
@@ -132,7 +133,7 @@ static PyObject
     }
 
     for (i = 0; i < n; ++i)
-        update_unaries(n, ntags, i, 0, unaries, score, back, theta);
+        update_unaries(n, ntags, i, 0, unaries, score, back, theta, 0);
 
     PyObject *list;
     double prob, lp, rp, p, tmp, *r, *l;
@@ -173,7 +174,7 @@ static PyObject
                     }
                 }
             }
-            update_unaries(n, ntags, begin, end, unaries, score, back, theta);
+            update_unaries(n, ntags, begin, end, unaries, score, back, theta, 1);
         }
     }
 
