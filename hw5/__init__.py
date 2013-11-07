@@ -58,7 +58,9 @@ class Parser(object):
         root = back[0][-1][self.grammar.tag_map[root_tag]]
         if root is None:
             print("Invalid parse")
-            return nltk.Tree(root_tag, sentence)
+            return nltk.Tree(root_tag, [nltk.Tree("S", [
+                nltk.Tree(self.lexicon.best_tag(w), [w]) for w in sentence
+            ])])
 
         # Build the tree using the backpointers.
         tree = nltk.Tree(root_tag, [self.build_tree(sentence, back, r)
