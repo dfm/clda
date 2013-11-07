@@ -16,6 +16,7 @@ parser.add_argument("--maxTrain", default=999, type=int)
 parser.add_argument("--horizontal", default=None, type=int)
 parser.add_argument("--vertical", default=0, type=int)
 parser.add_argument("--mini", action="store_true")
+parser.add_argument("--theta", default=0.5, type=float)
 args = parser.parse_args()
 
 if args.mini:
@@ -78,6 +79,6 @@ else:
     open(outfn, "w").close()
     for i, s in enumerate(test_sentences):
         print("Test sentence {0} ({1} words)".format(i, len(s)))
-        tree = parser.generate_parse_tree(s)
+        tree = parser.generate_parse_tree(s, theta=args.theta)
         tree.un_chomsky_normal_form()
         open(outfn, "a").write(tree.pprint(margin=1e10) + "\n")

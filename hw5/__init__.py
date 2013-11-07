@@ -34,7 +34,7 @@ class Parser(object):
         self.grammar = grammar
         self.lexicon = lexicon
 
-    def generate_parse_tree(self, sentence, root_tag="TOP"):
+    def generate_parse_tree(self, sentence, root_tag="TOP", theta=0.5):
         n = len(sentence)
         ntags = self.grammar.ntags
 
@@ -49,8 +49,10 @@ class Parser(object):
                     score[i, 0, self.grammar.tag_map[t]] = s
                     back[i, 0, self.grammar.tag_map[t]] = [(i, 0, i, 1)]
 
-        _cky.decode(n, ntags, score, back, self.grammar.unaries,
-                    self.grammar.binaries)
+        _cky.decode(n, ntags, score, back,
+                    self.grammar.unary_inds, self.grammar.unary_values,
+                    self.grammar.binary_inds, self.grammar.binary_values,
+                    theta)
 
         # Check to make sure that this is a valid parse.
         root = back[0][-1][self.grammar.tag_map[root_tag]]
@@ -117,19 +119,25 @@ class Grammar(object):
         # Build the probability matrices.
         ntags = self.ntags = len(self.tag_map)
         print("Using {0} tags".format(ntags))
-        self.unaries = 99. + np.zeros((ntags, ntags))
+        self.unary_inds = [[] for i in range(ntags)]
+        self.unary_values = [[] for i in range(ntags)]
         for parent, u in unaries.items():
             pind = self.tag_map[parent]
             for child, p in u.items():
-                self.unaries[self.tag_map[child], pind] = p
+                cind = self.tag_map[child]
+                self.unary_inds[cind].append(pind)
+                self.unary_values[cind].append(p)
 
-        self.binaries = 99. + np.zeros((ntags, ntags, ntags))
+        self.binary_inds = [[[] for i in range(ntags)] for j in range(ntags)]
+        self.binary_values = [[[] for i in range(ntags)] for j in range(ntags)]
         for parent, b in binaries.items():
             pind = self.tag_map[parent]
             for children, p in b.items():
                 left_child, right_child = children.split()
-                self.binaries[self.tag_map[left_child],
-                              self.tag_map[right_child], pind] = p
+                lcind = self.tag_map[left_child]
+                rcind = self.tag_map[right_child]
+                self.binary_inds[lcind][rcind].append(pind)
+                self.binary_values[lcind][rcind].append(p)
 
 
 class MiniGrammar(Grammar):
