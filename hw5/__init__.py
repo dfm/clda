@@ -15,6 +15,49 @@ import nltk
 from . import _cky
 
 
+class Evaluator(object):
+
+    def __init__(self, ignore, punct):
+        self.ignore = ignore
+        self.punct = punct
+        self.correct = 0
+        self.guessed = 0
+        self.gold = 0
+
+    def make_objects(self, tree):
+        const = []
+        self.add_constituents(tree, const, 0)
+        return set(const)
+
+    def add_constituents(self, tree, const, start):
+        if tree.height() <= 2:
+            label = tree.node
+            return int(label not in self.punct)
+        end = start
+        for child in tree:
+            end += self.add_constituents(child, const, end)
+        label = tree.node
+        if label not in self.ignore:
+            const.append("{0}:{1}:{2}".format(label, start, end))
+        return end - start
+
+    def __call__(self, guess, gold):
+        gold_set = self.make_objects(gold)
+        guess_set = self.make_objects(guess)
+        correct_set = gold_set & guess_set
+        self.correct += len(correct_set)
+        self.guessed += len(guess_set)
+        self.gold += len(gold_set)
+        return self.get_f1()
+
+    def get_f1(self):
+        correct, guessed, gold = self.correct, self.guessed, self.gold
+        precision = correct/guessed if guessed > 0 else 1.0
+        recall = correct/gold if gold > 0 else 1.0
+        f1 = 2/(1/precision+1/recall) if precision > 0 and recall > 0 else 0.0
+        return f1*100.0
+
+
 class Counter(defaultdict):
 
     def __init__(self):
