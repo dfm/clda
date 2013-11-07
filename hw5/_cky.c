@@ -67,7 +67,6 @@ static PyObject
            *score = PyArray_DATA(score_array);
     PyObject **back = PyArray_DATA(back_array);
 
-    printf("initial unaries\n");
     for (i = 0; i < n; ++i)
         update_unaries(n, ntags, i, 0, unaries, score, back);
 
@@ -75,7 +74,6 @@ static PyObject
     double prob, lp, rp, p, tmp, *r, *l, *b;
     int span, begin, end, split, parent, lchild, rchild, ind;
     for (span = 0; span < n; ++span) {
-        printf("span = %d\n", span);
         for (begin = 0; begin < n-span-1; ++begin) {
             end = span + 1;
             ind = (begin*n+end)*ntags;

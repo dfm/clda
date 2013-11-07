@@ -38,11 +38,9 @@ class Parser(object):
         n = len(sentence)
         ntags = self.grammar.ntags
 
-        print("memory")
         score = np.ones((n, n, ntags), dtype=float)
         back = np.empty((n, n, ntags), dtype="O")
 
-        print("lexical")
         # Apply lexical rules.
         for i, w in enumerate(sentence):
             for t in self.lexicon.tags:
@@ -51,15 +49,14 @@ class Parser(object):
                     score[i, 0, self.grammar.tag_map[t]] = s
                     back[i, 0, self.grammar.tag_map[t]] = [(i, 0, i, 1)]
 
-        print("decoding")
         _cky.decode(n, ntags, score, back, self.grammar.unaries,
                     self.grammar.binaries)
 
         # Check to make sure that this is a valid parse.
         root = back[0][-1][self.grammar.tag_map[root_tag]]
         if root is None:
-            print(score[0][-1])
-            raise RuntimeError("Invalid parse")
+            print("Invalid parse")
+            return nltk.Tree(root_tag, ["null"])
 
         # Build the tree using the backpointers.
         tree = nltk.Tree(root_tag, [self.build_tree(sentence, back, r)

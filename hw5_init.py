@@ -4,6 +4,7 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
+import os
 import hw5
 import argparse
 import cPickle as pickle
@@ -48,6 +49,13 @@ else:
     train_corpus = BracketParseCorpusReader(args.data,
                                             "en-wsj-train.1.mrg")
 
+    # Load test sentences.
+    print("Loading test sentences")
+    test_sentences = [line.strip().split()
+                      for line in open(os.path.join(args.data,
+                                                    "en-web-weblogs-test"
+                                                    ".sentences"))]
+
     print("Building grammar and lexicon")
     lexicon = hw5.Lexicon(train_corpus.tagged_words())
     grammar = hw5.FullGrammar(train_corpus, lexicon, max_train=args.maxTrain,
@@ -66,8 +74,10 @@ if args.mini:
 
 else:
     print("Parsing")
-    s = train_corpus.sents()[3]
-    print(len(s))
-    tree = parser.generate_parse_tree(s)
-    tree.un_chomsky_normal_form()
-    tree.draw()
+    outfn = os.path.join(args.data, "output.txt")
+    open(outfn, "w").close()
+    for i, s in enumerate(test_sentences):
+        print("Test sentence {0} ({1} words)".format(i, len(s)))
+        tree = parser.generate_parse_tree(s)
+        tree.un_chomsky_normal_form()
+        open(outfn, "a").write(tree.pprint(margin=1e10) + "\n")
