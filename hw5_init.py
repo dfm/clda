@@ -86,10 +86,12 @@ if args.mini:
 else:
     if args.validate:
         validation_fn = os.path.join(args.data, "validation.txt")
-        open(validation_fn, "a").write("h: {0} v: {1} theta: {2}\n"
+        open(validation_fn, "a").write(("h: {0} v: {1} theta: {2} "
+                                        "maxTrain: {3} maxValid: {4}\n")
                                        .format(args.horizontal,
                                                args.vertical,
-                                               args.theta))
+                                               args.theta,
+                                               args.maxTrain, args.maxValid))
 
         evaluator = hw5.Evaluator(["ROOT", "TOP"], ["''", "``", ".", ":", ","])
         for gold in in_domain.parsed_sents():
