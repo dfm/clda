@@ -33,6 +33,9 @@ class Parser(object):
     def __init__(self, grammar, lexicon):
         self.grammar = grammar
         self.lexicon = lexicon
+        self.decoder = _cky._cky(grammar.ntags,
+                                 grammar.unary_inds, grammar.unary_values,
+                                 grammar.binary_inds, grammar.binary_values)
 
     def generate_parse_tree(self, sentence, root_tag="TOP", theta=0.5):
         n = len(sentence)
@@ -49,16 +52,13 @@ class Parser(object):
                     score[i, 0, self.grammar.tag_map[t]] = s
                     back[i, 0, self.grammar.tag_map[t]] = [(i, 0, i, 1)]
 
-        _cky.decode(n, ntags, score, back,
-                    self.grammar.unary_inds, self.grammar.unary_values,
-                    self.grammar.binary_inds, self.grammar.binary_values,
-                    theta)
+        self.decoder.decode(n, score, back, theta)
 
         # Check to make sure that this is a valid parse.
         root = back[0][-1][self.grammar.tag_map[root_tag]]
         if root is None:
             print("Invalid parse")
-            return nltk.Tree(root_tag, ["null"])
+            return nltk.Tree(root_tag, sentence)
 
         # Build the tree using the backpointers.
         tree = nltk.Tree(root_tag, [self.build_tree(sentence, back, r)

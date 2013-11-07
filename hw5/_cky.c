@@ -1,16 +1,6 @@
 #include <Python.h>
+#include <structmember.h>
 #include <numpy/arrayobject.h>
-
-struct module_state {
-    PyObject *error;
-};
-
-#if PY_MAJOR_VERSION >= 3
-#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
-#else
-#define GETSTATE(m) (&_state)
-static struct module_state _state;
-#endif
 
 #define PARSE_ARRAY(o) (PyArrayObject*) PyArray_FROM_OTF(o, NPY_DOUBLE, \
         NPY_INOUT_ARRAY)
@@ -38,6 +28,83 @@ void sparse_free (sparse *self)
     free(self->values);
     free(self);
 }
+
+typedef struct {
+    PyObject_HEAD
+    int ntags;
+    sparse **unaries;
+    sparse **binaries;
+} _cky;
+
+static void _cky_dealloc(_cky *self)
+{
+    int i;
+    for (i = 0; i < self->ntags; ++i)
+        sparse_free (self->unaries[i]);
+    for (i = 0; i < self->ntags*self->ntags; ++i)
+        sparse_free (self->binaries[i]);
+
+    self->ob_type->tp_free((PyObject*)self);
+}
+
+static PyObject *_cky_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    _cky *self;
+    self = (_cky*)type->tp_alloc(type, 0);
+    self->unaries = NULL;
+    self->binaries = NULL;
+    return (PyObject*)self;
+}
+
+static int _cky_init(_cky *self, PyObject *args, PyObject *kwds)
+{
+    int i, j, k, ind, nnz, ntags;
+    PyObject *unary_inds_obj, *unary_values_obj,
+             *binary_inds_obj, *binary_values_obj;
+    if (!PyArg_ParseTuple(args, "iOOOO", &ntags,
+                          &unary_inds_obj, &unary_values_obj,
+                          &binary_inds_obj, &binary_values_obj))
+        return -1;
+
+    self->ntags = ntags;
+
+    // Build unary and binary structures.
+    PyObject *tmp_inds, *tmp_values, *tmp_inds2, *tmp_values2;
+    self->unaries = malloc(ntags * sizeof(sparse*));
+    for (i = 0; i < ntags; ++i) {
+        tmp_inds = PyList_GetItem(unary_inds_obj, i);
+        tmp_values = PyList_GetItem(unary_values_obj, i);
+        nnz = PyList_Size(tmp_inds);
+        self->unaries[i] = sparse_init (ntags, nnz);
+        for (j = 0; j < nnz; ++j) {
+            self->unaries[i]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds, j));
+            self->unaries[i]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values, j));
+        }
+    }
+
+    self->binaries = malloc(ntags * ntags * sizeof(sparse*));
+    for (i = 0; i < ntags; ++i) {
+        tmp_inds = PyList_GetItem(binary_inds_obj, i);
+        tmp_values = PyList_GetItem(binary_values_obj, i);
+        for (k = 0; k < ntags; ++k) {
+            tmp_inds2 = PyList_GetItem(tmp_inds, k);
+            tmp_values2 = PyList_GetItem(tmp_values, k);
+
+            nnz = PyList_Size(tmp_inds2);
+
+            ind = i*ntags+k;
+            self->binaries[ind] = sparse_init (ntags, nnz);
+            for (j = 0; j < nnz; ++j) {
+                self->binaries[ind]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds2, j));
+                self->binaries[ind]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values2, j));
+            }
+        }
+    }
+
+    return 0;
+}
+
+static PyMemberDef _cky_members[] = {{NULL}};
 
 void update_unaries (int n, int ntags, int start, int end,
                      sparse **unaries, double *score, PyObject **back,
@@ -82,16 +149,12 @@ void update_unaries (int n, int ntags, int start, int end,
 }
 
 static PyObject
-*cky_decode (PyObject *self, PyObject *args)
+*cky_decode (_cky *self, PyObject *args)
 {
     double theta;
-    int i, j, k, ind, n, nnz, ntags;
-    PyObject *score_obj, *back_obj,
-             *unary_inds_obj, *unary_values_obj,
-             *binary_inds_obj, *binary_values_obj;
-    if (!PyArg_ParseTuple(args, "iiOOOOOOd", &n, &ntags, &score_obj, &back_obj,
-                          &unary_inds_obj, &unary_values_obj,
-                          &binary_inds_obj, &binary_values_obj, &theta))
+    int i, j, ind, n, ntags = self->ntags;
+    PyObject *score_obj, *back_obj;
+    if (!PyArg_ParseTuple(args, "iOOd", &n, &score_obj, &back_obj, &theta))
         return NULL;
 
     PyArrayObject *score_array = PARSE_ARRAY(score_obj),
@@ -99,45 +162,13 @@ static PyObject
     double *score = PyArray_DATA(score_array);
     PyObject **back = PyArray_DATA(back_array);
 
-    // Build unary and binary structures.
-    PyObject *tmp_inds, *tmp_values, *tmp_inds2, *tmp_values2;
-    sparse **unaries = malloc(ntags * sizeof(sparse*));
-    for (i = 0; i < ntags; ++i) {
-        tmp_inds = PyList_GetItem(unary_inds_obj, i);
-        tmp_values = PyList_GetItem(unary_values_obj, i);
-        nnz = PyList_Size(tmp_inds);
-        unaries[i] = sparse_init (ntags, nnz);
-        for (j = 0; j < nnz; ++j) {
-            unaries[i]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds, j));
-            unaries[i]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values, j));
-        }
-    }
-
-    sparse **binaries = malloc(ntags * ntags * sizeof(sparse*));
-    for (i = 0; i < ntags; ++i) {
-        tmp_inds = PyList_GetItem(binary_inds_obj, i);
-        tmp_values = PyList_GetItem(binary_values_obj, i);
-        for (k = 0; k < ntags; ++k) {
-            tmp_inds2 = PyList_GetItem(tmp_inds, k);
-            tmp_values2 = PyList_GetItem(tmp_values, k);
-
-            nnz = PyList_Size(tmp_inds2);
-
-            ind = i*ntags+k;
-            binaries[ind] = sparse_init (ntags, nnz);
-            for (j = 0; j < nnz; ++j) {
-                binaries[ind]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds2, j));
-                binaries[ind]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values2, j));
-            }
-        }
-    }
-
     for (i = 0; i < n; ++i)
-        update_unaries(n, ntags, i, 0, unaries, score, back, theta, 0);
+        update_unaries(n, ntags, i, 0, self->unaries, score, back, theta, 0);
 
     PyObject *list;
     double prob, lp, rp, p, tmp, *r, *l;
     int span, begin, end, split, parent, lchild, rchild;
+    sparse **binaries = self->binaries;
     for (span = 0; span < n; ++span) {
         for (begin = 0; begin < n-span-1; ++begin) {
             end = span + 1;
@@ -174,14 +205,9 @@ static PyObject
                     }
                 }
             }
-            update_unaries(n, ntags, begin, end, unaries, score, back, theta, 1);
+            update_unaries(n, ntags, begin, end, self->unaries, score, back, theta, 1);
         }
     }
-
-    for (i = 0; i < ntags; ++i)
-        sparse_free (unaries[i]);
-    for (i = 0; i < ntags*ntags; ++i)
-        sparse_free (binaries[i]);
 
     Py_DECREF(score_array);
     Py_DECREF(back_array);
@@ -190,7 +216,7 @@ static PyObject
     return Py_None;
 }
 
-static PyMethodDef cky_methods[] = {
+static PyMethodDef _cky_methods[] = {
     {"decode",
      (PyCFunction) cky_decode,
      METH_VARARGS,
@@ -198,58 +224,63 @@ static PyMethodDef cky_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-#if PY_MAJOR_VERSION >= 3
-
-static int cky_traverse(PyObject *m, visitproc visit, void *arg) {
-    Py_VISIT(GETSTATE(m)->error);
-    return 0;
-}
-
-static int cky_clear(PyObject *m) {
-    Py_CLEAR(GETSTATE(m)->error);
-    return 0;
-}
-
-static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "_cky",
-    NULL,
-    sizeof(struct module_state),
-    cky_methods,
-    NULL,
-    cky_traverse,
-    cky_clear,
-    NULL
+static PyTypeObject _cky_type = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "_cky._cky",         /*tp_name*/
+    sizeof(_cky),           /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)_cky_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "",                   /* tp_doc */
+    0,                         /* tp_traverse */
+    0,                         /* tp_clear */
+    0,                         /* tp_richcompare */
+    0,                         /* tp_weaklistoffset */
+    0,                         /* tp_iter */
+    0,                         /* tp_iternext */
+    _cky_methods,               /* tp_methods */
+    _cky_members,               /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    (initproc)_cky_init,        /* tp_init */
+    0,                         /* tp_alloc */
+    _cky_new,                   /* tp_new */
 };
 
-#define INITERROR return NULL
-
-PyObject *PyInit__cky(void)
-#else
-#define INITERROR return
-
+static char module_doc[] = "";
+static PyMethodDef module_methods[] = {{NULL}};
 void init_cky(void)
-#endif
 {
-#if PY_MAJOR_VERSION >= 3
-    PyObject *module = PyModule_Create(&moduledef);
-#else
-    PyObject *module = Py_InitModule("_cky", cky_methods);
-#endif
+    PyObject *m;
 
-    if (module == NULL)
-        INITERROR;
-    struct module_state *st = GETSTATE(module);
+    if (PyType_Ready(&_cky_type) < 0)
+        return;
 
-    st->error = PyErr_NewException("_cky.Error", NULL, NULL);
-    if (st->error == NULL) {
-        Py_DECREF(module);
-        INITERROR;
-    }
+    m = Py_InitModule3("_cky", module_methods, module_doc);
+    if (m == NULL)
+        return;
+
+    Py_INCREF(&_cky_type);
+    PyModule_AddObject(m, "_cky", (PyObject *)&_cky_type);
 
     import_array();
-
-#if PY_MAJOR_VERSION >= 3
-    return module;
-#endif
 }
