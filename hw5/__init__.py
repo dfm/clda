@@ -77,8 +77,7 @@ class Parser(object):
         self.grammar = grammar
         self.lexicon = lexicon
         self.decoder = _cky._cky(grammar.ntags,
-                                 grammar.unary_inds, grammar.unary_values,
-                                 grammar.binary_inds, grammar.binary_values)
+                                 grammar.unaries, grammar.binaries)
 
     def generate_parse_tree(self, sentence, root_tag="TOP", theta=0.5):
         n = len(sentence)
@@ -164,25 +163,21 @@ class Grammar(object):
         # Build the probability matrices.
         ntags = self.ntags = len(self.tag_map)
         print("Using {0} tags".format(ntags))
-        self.unary_inds = [[] for i in range(ntags)]
-        self.unary_values = [[] for i in range(ntags)]
+        self.unaries = []
         for parent, u in unaries.items():
             pind = self.tag_map[parent]
             for child, p in u.items():
                 cind = self.tag_map[child]
-                self.unary_inds[cind].append(pind)
-                self.unary_values[cind].append(p)
+                self.unaries.append([pind, cind, p])
 
-        self.binary_inds = [[[] for i in range(ntags)] for j in range(ntags)]
-        self.binary_values = [[[] for i in range(ntags)] for j in range(ntags)]
+        self.binaries = []
         for parent, b in binaries.items():
             pind = self.tag_map[parent]
             for children, p in b.items():
                 left_child, right_child = children.split()
                 lcind = self.tag_map[left_child]
                 rcind = self.tag_map[right_child]
-                self.binary_inds[lcind][rcind].append(pind)
-                self.binary_values[lcind][rcind].append(p)
+                self.binaries.append([pind, lcind, rcind, p])
 
 
 class MiniGrammar(Grammar):

@@ -7,49 +7,51 @@
 
 typedef struct unary_struct {
 
-    int n, *parents, *children;
-    double *value;
+    int parent, child;
+    double value;
 
 } unary_rule;
 
-typedef struct sparse_struct {
+typedef struct binary_struct {
 
-    int n, nnz, *inds;
-    double *values;
+    int parent, lchild, rchild;
+    double value;
 
-} sparse;
+} binary_rule;
 
-sparse * sparse_init (int n, int nnz)
+unary_rule * unary_init (int parent, int child, double value)
 {
-    sparse *self = malloc(sizeof(sparse));
-    self->n = n;
-    self->nnz = nnz;
-    self->inds = malloc(nnz*sizeof(int));
-    self->values = malloc(nnz*sizeof(double));
+    unary_rule *self = malloc(sizeof(unary_rule));
+    self->parent = parent;
+    self->child = child;
+    self->value = value;
     return self;
 }
 
-void sparse_free (sparse *self)
+binary_rule * binary_init (int parent, int lchild, int rchild, double value)
 {
-    free(self->inds);
-    free(self->values);
-    free(self);
+    binary_rule *self = malloc(sizeof(binary_rule));
+    self->parent = parent;
+    self->lchild = lchild;
+    self->rchild = rchild;
+    self->value = value;
+    return self;
 }
 
 typedef struct {
     PyObject_HEAD
-    int ntags;
-    sparse **unaries;
-    sparse **binaries;
+    int ntags, nbinaries, nunaries;
+    unary_rule **unaries;
+    binary_rule **binaries;
 } _cky;
 
 static void _cky_dealloc(_cky *self)
 {
     int i;
-    for (i = 0; i < self->ntags; ++i)
-        sparse_free (self->unaries[i]);
-    for (i = 0; i < self->ntags*self->ntags; ++i)
-        sparse_free (self->binaries[i]);
+    for (i = 0; i < self->nunaries; ++i)
+        free (self->unaries[i]);
+    for (i = 0; i < self->nbinaries; ++i)
+        free (self->binaries[i]);
 
     self->ob_type->tp_free((PyObject*)self);
 }
@@ -65,47 +67,36 @@ static PyObject *_cky_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
 static int _cky_init(_cky *self, PyObject *args, PyObject *kwds)
 {
-    int i, j, k, ind, nnz, ntags;
-    PyObject *unary_inds_obj, *unary_values_obj,
-             *binary_inds_obj, *binary_values_obj;
-    if (!PyArg_ParseTuple(args, "iOOOO", &ntags,
-                          &unary_inds_obj, &unary_values_obj,
-                          &binary_inds_obj, &binary_values_obj))
+    int i, ntags;
+    PyObject *unaries_obj, *binaries_obj;
+    if (!PyArg_ParseTuple(args, "iOO", &ntags, &unaries_obj, &binaries_obj))
         return -1;
 
     self->ntags = ntags;
 
-    // Build unary and binary structures.
-    PyObject *tmp_inds, *tmp_values, *tmp_inds2, *tmp_values2;
-    self->unaries = malloc(ntags * sizeof(sparse*));
-    for (i = 0; i < ntags; ++i) {
-        tmp_inds = PyList_GetItem(unary_inds_obj, i);
-        tmp_values = PyList_GetItem(unary_values_obj, i);
-        nnz = PyList_Size(tmp_inds);
-        self->unaries[i] = sparse_init (ntags, nnz);
-        for (j = 0; j < nnz; ++j) {
-            self->unaries[i]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds, j));
-            self->unaries[i]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values, j));
-        }
+    self->nunaries = PyList_Size(unaries_obj);
+    self->unaries = malloc(self->nunaries * sizeof(unary_rule*));
+    self->nbinaries = PyList_Size(binaries_obj);
+    self->binaries = malloc(self->nbinaries * sizeof(binary_rule*));
+
+    PyObject *el;
+    for (i = 0; i < self->nunaries; ++i) {
+        el = PyList_GetItem(unaries_obj, i);
+        self->unaries[i] = unary_init(
+            (int)PyLong_AsLong(PyList_GetItem(el, 0)),
+            (int)PyLong_AsLong(PyList_GetItem(el, 1)),
+            PyFloat_AS_DOUBLE(PyList_GetItem(el, 2))
+        );
     }
 
-    self->binaries = malloc(ntags * ntags * sizeof(sparse*));
-    for (i = 0; i < ntags; ++i) {
-        tmp_inds = PyList_GetItem(binary_inds_obj, i);
-        tmp_values = PyList_GetItem(binary_values_obj, i);
-        for (k = 0; k < ntags; ++k) {
-            tmp_inds2 = PyList_GetItem(tmp_inds, k);
-            tmp_values2 = PyList_GetItem(tmp_values, k);
-
-            nnz = PyList_Size(tmp_inds2);
-
-            ind = i*ntags+k;
-            self->binaries[ind] = sparse_init (ntags, nnz);
-            for (j = 0; j < nnz; ++j) {
-                self->binaries[ind]->inds[j] = (int)PyLong_AsLong(PyList_GetItem(tmp_inds2, j));
-                self->binaries[ind]->values[j] = PyFloat_AS_DOUBLE(PyList_GetItem(tmp_values2, j));
-            }
-        }
+    for (i = 0; i < self->nbinaries; ++i) {
+        el = PyList_GetItem(binaries_obj, i);
+        self->binaries[i] = binary_init(
+            (int)PyLong_AsLong(PyList_GetItem(el, 0)),
+            (int)PyLong_AsLong(PyList_GetItem(el, 1)),
+            (int)PyLong_AsLong(PyList_GetItem(el, 2)),
+            PyFloat_AS_DOUBLE(PyList_GetItem(el, 3))
+        );
     }
 
     return 0;
@@ -113,8 +104,8 @@ static int _cky_init(_cky *self, PyObject *args, PyObject *kwds)
 
 static PyMemberDef _cky_members[] = {{NULL}};
 
-void update_unaries (int n, int ntags, int start, int end,
-                     sparse **unaries, double *score, PyObject **back,
+void update_unaries (int n, int ntags, int start, int end, int nunaries,
+                     unary_rule **unaries, double *score, PyObject **back,
                      double theta, int prune)
 {
     double value, prob, p, tmp, max_score = -INFINITY;
@@ -122,27 +113,25 @@ void update_unaries (int n, int ntags, int start, int end,
     PyObject *list;
     while (added) {
         added = 0;
-        for (child = 0; child < ntags; ++child) {
+
+        for (i = 0; i < nunaries; ++i) {
+            parent = unaries[i]->parent;
+            child = unaries[i]->child;
             value = score[ind+child];
             if (value <= 0.0) {
-                for (i = 0; i < unaries[child]->nnz; ++i) {
-                    parent = unaries[child]->inds[i];
-                    prob = unaries[child]->values[i];
-                    if (prob <= 0.0) {
-                        ip = ind + parent;
-                        p = prob + value;
-                        tmp = score[ip];
-                        if (tmp > 0 || p > tmp) {
-                            added = 1;
-                            score[ip] = p;
-                            if (p > max_score) max_score = p;
+                prob = unaries[i]->value;
+                ip = ind + parent;
+                p = prob + value;
+                tmp = score[ip];
+                if (tmp > 0 || p > tmp) {
+                    added = 1;
+                    score[ip] = p;
+                    if (p > max_score) max_score = p;
 
-                            list = PyList_New(1);
-                            PyList_SetItem(list, 0, Py_BuildValue("iiii", start, end, child, 0));
-                            Py_DECREF(back[ip]);
-                            back[ip] = list;
-                        }
-                    }
+                    list = PyList_New(1);
+                    PyList_SetItem(list, 0, Py_BuildValue("iiii", start, end, child, 0));
+                    Py_DECREF(back[ip]);
+                    back[ip] = list;
                 }
             }
         }
@@ -159,7 +148,7 @@ static PyObject
 *cky_decode (_cky *self, PyObject *args)
 {
     double theta;
-    int i, j, ind, n, ntags = self->ntags;
+    int i, ind, n, ntags = self->ntags;
     PyObject *score_obj, *back_obj;
     if (!PyArg_ParseTuple(args, "iOOd", &n, &score_obj, &back_obj, &theta))
         return NULL;
@@ -170,12 +159,11 @@ static PyObject
     PyObject **back = PyArray_DATA(back_array);
 
     for (i = 0; i < n; ++i)
-        update_unaries(n, ntags, i, 0, self->unaries, score, back, theta, 0);
+        update_unaries(n, ntags, i, 0, self->nunaries, self->unaries, score, back, theta, 0);
 
     PyObject *list;
     double prob, lp, rp, p, tmp, *r, *l;
     int span, begin, end, split, parent, lchild, rchild;
-    sparse **binaries = self->binaries;
     for (span = 0; span < n; ++span) {
         for (begin = 0; begin < n-span-1; ++begin) {
             end = span + 1;
@@ -183,36 +171,31 @@ static PyObject
             for (split = 0; split < span+1; ++split) {
                 l = &(score[(begin*n+split)*ntags]);
                 r = &(score[((begin+split+1)*n+(span-split))*ntags]);
-                for (lchild = 0; lchild < ntags; ++lchild) {
+                for (i = 0; i < self->nbinaries; ++i) {
+                    parent = self->binaries[i]->parent;
+                    lchild = self->binaries[i]->lchild;
+                    rchild = self->binaries[i]->rchild;
                     lp = l[lchild];
-                    if (lp <= 0.0) {
-                        for (rchild = 0; rchild < ntags; ++rchild) {
-                            rp = r[rchild];
-                            if (rp <= 0.0) {
-                                j = lchild*ntags+rchild;
-                                for (i = 0; i < binaries[j]->nnz; ++i) {
-                                    parent = binaries[j]->inds[i];
-                                    prob = binaries[j]->values[i];
-                                    if (prob <= 0.0) {
-                                        p = lp + rp + prob;
-                                        tmp = score[ind+parent];
-                                        if (tmp > 0 || p > tmp) {
-                                            score[ind+parent] = p;
+                    rp = r[rchild];
+                    if (lp <= 0.0 && rp <= 0.0) {
+                        prob = self->binaries[i]->value;
+                        if (prob <= 0.0) {
+                            p = lp + rp + prob;
+                            tmp = score[ind+parent];
+                            if (tmp > 0 || p > tmp) {
+                                score[ind+parent] = p;
 
-                                            list = PyList_New(2);
-                                            PyList_SetItem(list, 0, Py_BuildValue("iiii", begin, split, lchild, 0));
-                                            PyList_SetItem(list, 1, Py_BuildValue("iiii", begin+split+1, span-split, rchild, 0));
-                                            Py_DECREF(back[ind+parent]);
-                                            back[ind+parent] = list;
-                                        }
-                                    }
-                                }
+                                list = PyList_New(2);
+                                PyList_SetItem(list, 0, Py_BuildValue("iiii", begin, split, lchild, 0));
+                                PyList_SetItem(list, 1, Py_BuildValue("iiii", begin+split+1, span-split, rchild, 0));
+                                Py_DECREF(back[ind+parent]);
+                                back[ind+parent] = list;
                             }
                         }
                     }
                 }
             }
-            update_unaries(n, ntags, begin, end, self->unaries, score, back, theta, 1);
+            update_unaries(n, ntags, begin, end, self->nunaries, self->unaries, score, back, theta, 1);
         }
     }
 
