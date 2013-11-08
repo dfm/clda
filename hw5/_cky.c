@@ -5,6 +5,13 @@
 #define PARSE_ARRAY(o) (PyArrayObject*) PyArray_FROM_OTF(o, NPY_DOUBLE, \
         NPY_INOUT_ARRAY)
 
+typedef struct unary_struct {
+
+    int n, *parents, *children;
+    double *value;
+
+} unary_rule;
+
 typedef struct sparse_struct {
 
     int n, nnz, *inds;

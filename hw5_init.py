@@ -94,18 +94,6 @@ else:
                                                args.maxTrain, args.maxValid))
 
         evaluator = hw5.Evaluator(["ROOT", "TOP"], ["''", "``", ".", ":", ","])
-        for gold in in_domain.parsed_sents():
-            sentence = map(unicode, gold.leaves())
-            if len(sentence) > args.maxValid:
-                continue
-            guess = parser.generate_parse_tree(sentence, theta=args.theta)
-            guess.un_chomsky_normal_form()
-            evaluator(guess, gold)
-            print("F1 = {0}".format(evaluator.get_f1()))
-        open(validation_fn, "a").write("in-domain: {0}\n"
-                                       .format(evaluator.get_f1()))
-
-        evaluator = hw5.Evaluator(["ROOT", "TOP"], ["''", "``", ".", ":", ","])
         for gold in out_of_domain.parsed_sents():
             sentence = map(unicode, gold.leaves())
             if len(sentence) > args.maxValid:
@@ -115,6 +103,18 @@ else:
             evaluator(guess, gold)
             print("F1 = {0}".format(evaluator.get_f1()))
         open(validation_fn, "a").write("out-of-domain: {0}\n"
+                                       .format(evaluator.get_f1()))
+
+        evaluator = hw5.Evaluator(["ROOT", "TOP"], ["''", "``", ".", ":", ","])
+        for gold in in_domain.parsed_sents():
+            sentence = map(unicode, gold.leaves())
+            if len(sentence) > args.maxValid:
+                continue
+            guess = parser.generate_parse_tree(sentence, theta=args.theta)
+            guess.un_chomsky_normal_form()
+            evaluator(guess, gold)
+            print("F1 = {0}".format(evaluator.get_f1()))
+        open(validation_fn, "a").write("in-domain: {0}\n"
                                        .format(evaluator.get_f1()))
 
     if args.test:
