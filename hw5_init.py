@@ -10,6 +10,7 @@ import argparse
 from nltk.corpus.reader import BracketParseCorpusReader
 
 parser = argparse.ArgumentParser()
+parser.add_argument("name")
 parser.add_argument("-d", "--data", default="data")
 parser.add_argument("--maxTrain", default=999, type=int)
 parser.add_argument("--maxValid", default=40, type=int)
@@ -76,7 +77,6 @@ else:
 
 # Set up and train the parser.
 parser = hw5.Parser(grammar, lexicon)
-# pickle.dump(grammar, open("grammar.pkl", "wb"), -1)
 
 if args.mini:
     tree = parser.generate_parse_tree(["fish", "people", "fish", "tanks"],
@@ -84,8 +84,13 @@ if args.mini:
     tree.draw()
 
 else:
+    try:
+        os.makedirs(args.name)
+    except os.error:
+        print("Directory '{0}' already exists".format(args.name))
+
     if args.validate:
-        validation_fn = os.path.join(args.data, "validation.txt")
+        validation_fn = os.path.join(args.name, "validation.txt")
         open(validation_fn, "a").write(("h: {0} v: {1} theta: {2} "
                                         "maxTrain: {3} maxValid: {4}\n")
                                        .format(args.horizontal,
@@ -119,7 +124,7 @@ else:
 
     if args.test:
         print("Parsing test set.")
-        outfn = os.path.join(args.data, "output.txt")
+        outfn = os.path.join(args.name, "output.txt")
         open(outfn, "w").close()
         for i, s in enumerate(test_sentences):
             print("Test sentence {0} ({1} words)".format(i, len(s)))
