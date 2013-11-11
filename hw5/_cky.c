@@ -126,8 +126,6 @@ void update_unaries (int n, int ntags, int start, int end, int nunaries,
                 if (tmp > 0 || p > tmp) {
                     added = 1;
                     score[ip] = p;
-                    if (p > max_score) max_score = p;
-
                     list = PyList_New(1);
                     PyList_SetItem(list, 0, Py_BuildValue("iiii", start, end, child, 0));
                     Py_DECREF(back[ip]);
@@ -138,10 +136,16 @@ void update_unaries (int n, int ntags, int start, int end, int nunaries,
     }
 
     // Pruning.
-    if (prune)
+    if (prune) {
+        for (parent = 0; parent < ntags; ++parent) {
+            p = score[ind+parent];
+            if (p > max_score) max_score = p;
+        }
+
         for (parent = 0; parent < ntags; ++parent)
             if (score[ind+parent] < max_score - theta)
                 score[ind+parent] = 1.0;
+    }
 }
 
 static PyObject
