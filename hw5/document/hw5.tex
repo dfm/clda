@@ -66,9 +66,8 @@ come up with a way of doing it without loops).
 I used the NLTK\footnote{\url{http://nltk.org}} module for I/O because it
 includes methods for reading Penn Treebank-style tagged trees.
 I implemented the rest of the code by hand.
-As I will show below, the training step of my algorithm is quite slow but my
-final inference algorithm can parse a 20 word sentence in approximately XXXX
-seconds.
+The training step of my algorithm is quite slow but my final inference
+algorithm can parse a 20 word sentence in approximately one second.
 All of the code that I used for this assignment and the source code for this
 document is available on GitHub at \url{https://github.com/dfm/nlp} in the
 \code{hw5} directory.
@@ -150,28 +149,127 @@ first-order horizontal Markov process.
 
 The inference problem that we need to solve for this assignment is
 \begin{eqnarray}
-    G^* = \argmax_{G} p (G\,|\,\bvec{w})
+    G^* &=& \argmax_{G} p (G\,|\,\bvec{w})
 \end{eqnarray}
+where $G$ is the graph structure of the parse tree.
+This probability can be factorized---assuming a local probabilistic
+context-free grammar as discussed above---and evaluated for any given model.
+The evaluation of the MAP graph is best performed using the CKY algorithm.
+It took me a while to be able to wrap my head around the dynamic algorithm for
+solving this problem---even though it is embarrassingly simple---and the
+Youtube video posted by a
+classmate\footnote{\url{https://www.youtube.com/watch?v=MiEKnFyErbQ}} was an
+extremely useful resource.
+
+After implementing a functional version of the algorithm (in pure Python), I
+tried several different data structures in order to build an inference
+algorithm that could solve a sentence in a bearable amount of time.
+To do this, I was working directly in C with all of the tag names mapped to
+integers.
+In the end, the layout that I settled on was:
+\begin{itemize}
+\item{a flat list of unary rules,}
+\item{a flat list of binary rules, and}
+\item{sparse triangular representations of the node scores
+      (log-probabilities) and back pointers.}
+\end{itemize}
+In my tests, this structure was more efficient than something more
+sophisticated with support for child-major lookups but that might just be a
+shortcoming of my experience with efficient data structures.
+My final model---experiment F below---was able to parse a 20 word sentence in
+about a second but I didn't do any real benchmark so there are probably some
+other places to speed things up.
+
+I also experimented with pruning to speed up the inference.
+For simplicity, the prescription that I used was to discard any proposed
+parents $N$ in a single span $C$ with scores
+\begin{eqnarray}
+    \log p_N &<& \max_C\,\log p - \theta
+\end{eqnarray}
+where $\theta$ is a free parameter and the maximization finds the highest
+score in the clique.
+While this technique does significantly reduce run time, I found that it had a
+substantial negative impact on my results on the validation data so for all of
+my experiments discussed here, I will set $\theta \ge 1000$ (the results seem
+to be insensitive to the value when it is this large).
+
+In practice, some sentences in the training data are not valid members of the
+grammar---there is no path with finite probability from the \code{TOP} tag to
+the observed sentence.
+In these cases, I simply generated a dummy parse that emits the maximum
+likelihood parts-of-speech from a \code{S} tag.
+These sentences are quite rare but in a production system, it would probably
+be a good idea to spend some time to build heuristic rules for corner cases
+like this.
 
 \section{Experiments}
 
-% \begin{figure}[htbp]
-% \begin{center}
-%     \includegraphics[width=0.5\textwidth]{model2_convergence.pdf}
-% \end{center}
-% \caption{%
-% The same as \fig{model2-convergence} but using \emph{Model 2}.
-% The bottom panel here shows the value of $\alpha$ at each step.
-% \figlabel{model2-convergence}}
-% \end{figure}
-%
-% \begin{thebibliography}{}\raggedright
-%
-% \bibitem[Brown \etal(1993)]{ibm}
-% P.~F.~Brown, S.~A.~Della\ Pietra, V.~J.~Della\ Pietra, \& R.~L.~Mercer (1993)
-% \textbf{The Mathematics of Statistical Machine Translation: Parameter
-%         Estimation}, Computational Linguistics, 19, 2
-%
-% \end{thebibliography}
+Since the implementation of this inference algorithm took such a long time, I
+only ran six production experiments for this assignment.
+Each experiment was trained on all the training trees from the Penn Treebank
+and validated on the sentences from the in-domain and out-of-domain
+sentences with fewer than 41 words.
+The differences between the experiments were only the orders of the
+horizontal and vertical Markov processes.
+I used the full CKY algorithm for each experiment so the exact maximum
+probability tree should be recovered in each case.
+This means that the only practical difference between experiments is the model
+complexity and it would be a good idea to set the Markovization orders using
+cross-validation on the development treebanks.
+The runtime of the inference only scales linearly with the number of rules so
+more complex models are still computationally tractable but they don't
+necessarily generalize robustly due to sparsity in the training data.
+
+The specification and F1 scores for each experiment are listed in
+Table~\ref{tab:results}.
+The F1 scores for the in-domain and out-of-domain validation sets are shown in
+Figures~\ref{fig:in-domain} and~\ref{fig:out-of-domain} respectively.
+In practice, I found that the performance on the test sentences (as evaluated
+by the leader board) was significantly better (by $\sim 5\%$) than the
+out-of-domain validation set.
+As the model complexity increases most of the results improve but the most
+complex model (F) doesn't generalize on the in-domain trees as well as model
+E.
+I found the same result when models E and F were compared on the test set.
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{ccccc}
+\toprule
+&\multicolumn{2}{c}{Markovization order}
+&\multicolumn{2}{c}{F1 score [\%]} \\
+experiment & horizontal & vertical & out-of-domain & in-domain \\\midrule
+    A & $\infty$ & 0 & 57.137 & 65.674 \\
+    B & 1 & 0 & 56.679 & 64.428 \\
+    C & 2 & 0 & 58.146 & 65.413 \\
+    D & 2 & 1 & 63.507 & 71.493 \\
+    E & 2 & 2 & 63.945 & 73.050 \\
+    F & 3 & 2 & 64.403 & 72.983 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\caption{%
+The specifications of the experiments and the resulting F1 scores.
+\label{tab:results}}
+\end{table}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.7\textwidth]{in-domain.pdf}
+\end{center}
+\caption{%
+The performance of the models on the in-domain validation trees.
+This figure is sorted (roughly) by model complexity.
+\figlabel{in-domain}}
+\end{figure}
+
+\begin{figure}[htbp]
+\begin{center}
+    \includegraphics[width=0.7\textwidth]{out-of-domain.pdf}
+\end{center}
+\caption{%
+The same as \fig{in-domain} for the out-of-domain validation set.
+\figlabel{out-of-domain}}
+\end{figure}
 
 \end{document}
