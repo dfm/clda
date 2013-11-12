@@ -139,7 +139,7 @@ void update_unaries (int n, int ntags, int start, int end, int nunaries,
     if (prune) {
         for (parent = 0; parent < ntags; ++parent) {
             p = score[ind+parent];
-            if (p > max_score) max_score = p;
+            if (p <= 0.0 && p > max_score) max_score = p;
         }
 
         for (parent = 0; parent < ntags; ++parent)
