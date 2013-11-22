@@ -57,6 +57,7 @@
 \newcommand{\data}{\mathcal{D}}
 \newcommand{\code}[1]{{\sffamily #1}}
 \DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
 
 
 \begin{document}
@@ -96,6 +97,54 @@ p(w\,|\,\alpha,\eta) &=& \int\dd\beta\dd\theta\dd z \,
 \end{eqnarray}
 and optimize but this marginalization is intractable so we have to resort to
 approximate methods.
+Following \citet{lda}, we'll describe the mean field variational approach.
+In this framework, an approximate model is postulated and the inference
+becomes an optimization of the KL divergence.
+The bottom panel of \fig{lda} shows the commonly used mean field model.
+The approximate distributions are:
+\begin{eqnarray}
+q(\beta_k\,|\,\lambda_k) &=&
+\frac{\Gamma\left( \sum_j \lambda_{k,j} \right)}{\sum_j \Gamma(\lambda_{k,j})}
+\, \prod_{j=1}^J \beta_{k,j}^{\lambda_{k,j}-1} \quad, \\
+q(\theta_d\,|\,\gamma_d) &=&
+\frac{\Gamma\left( \sum_j \gamma_{d,j} \right)}{\sum_j \Gamma(\gamma_{d,j})}
+\, \prod_{j=1}^J \theta_{d,j}^{\gamma_{d,j}-1} \quad, \\
+q(z_{d,n}\,|\,\phi_{d,n}) &=& \phi_{d,n} \quad.
+\end{eqnarray}
+Given this approximate distribution, the inference problem is solved by
+performing the optimization
+\begin{eqnarray}\eqlabel{opt}
+(\lambda^*,\,\gamma^*,\,\phi^*) &=& \argmax_{\lambda,\gamma,\phi}
+\,\mathrm{D}\left [ q(\beta,\theta,z\,|\,\lambda,\gamma,\phi)\,||\,
+p(\beta,\theta,z\,|\,w,\eta,\alpha)\right ]
+\end{eqnarray}
+where D is the KL divergence.
+These optimal parameters then provide approximate posterior distributions for
+$\beta$, $\theta$, and $z$.
+
+The optimization in \eq{opt} can be rewritten---using Jensen's inequality---as
+a maximization of the ``evidence lower bound'' (ELBO)
+\begin{eqnarray}
+\mathcal{L}(w,\lambda,\gamma,\phi) &=&
+\expect{q}{\log p(w,\beta,\theta,z\,|\,\eta,\alpha)}
+- \expect{q}{\log q(\beta,\theta,z\,|\,\lambda,\gamma,\phi)} \\
+&\le& \log p(w\,|\,\alpha,\eta) \quad.
+\end{eqnarray}
+Using the fact that the model factorizes as shown in \fig{lda}, the ELBO can
+be rewritten as
+\begin{eqnarray}
+\mathcal{L}(w,\lambda,\gamma,\phi) &=&
+    \sum_{d=1}^D\left \{ \frac{1}{D} \left (
+    \sum_{k=1}^K \expect{q}{\log p(\beta_k\,|\,\eta)}
+    -\sum_{k=1}^K \expect{q}{\log q(\beta_k\,|\,\lambda_k)} \right )
+    + \expect{q}{\log p(\theta_d\,|\,\alpha)}\right. \nonumber\\
+&&  + \sum_{n=1}^{N_d} \expect{q}{\log p(z_{d,n}\,|\,\theta_d)}
+    +\sum_{n=1}^{N_d}\expect{q}{\log p(w_{d,n}\,|\,z_{d,n},\beta)}
+\nonumber\\
+&&  \left.-\expect{q}{\log q(\theta_d\,|\,\gamma_d)}
+    -\sum_{n=1}^{N_d} \expect{q}{\log q(z_{d,n}\,|\,\phi_{d,n})}
+\right \}
+\end{eqnarray}
 
 \begin{figure}
 \begin{center}
@@ -106,31 +155,50 @@ LDA
 \figlabel{lda}}
 \end{figure}
 
-\subsection{Computing the perplexity}
+\begin{thebibliography}{}\raggedright
 
-The marginalized log-likelihood is
+\bibitem[Blei, Ng \& Jordan(2003)]{lda}
+D. Blei, A. Ng, \& M. Jordan. \textbf{Latent Dirichlet allocation}.
+\emph{Journal of Machine Learning Research}, 3:993–1022, January 2003.
+
+\end{thebibliography}
+
+\appendix
+
+\section{Derivations of Variational Expectations}
+
+For simplicity, we'll assume that the hyperparameters $\alpha$ and $\eta$ are
+constant
 \begin{eqnarray}
-\log p (\bvec{w}\,|\,\bvec{\alpha},\bvec{\beta}) &\le&
-    \expect{q}{\log p
-        (\bvec{\theta},\bvec{z},\bvec{w}\,|\,\bvec{\alpha},\bvec{\beta})}
-    - \expect{q}{\log q(\bvec{\theta},\bvec{z})} \quad.
+\alpha_k = \alpha\quad\forall k &\mathrm{and}&
+\eta_j = \eta\quad\forall j \quad.
 \end{eqnarray}
-Some useful quantities needed for computing this number are
+
 \begin{eqnarray}
-\expect{q}{\log p(\bvec{\theta}\,|\,\bvec{\alpha})} &=&
-    \log \Gamma \left ( \sum_k \alpha_k \right )
-    - \sum_k \log \Gamma \left ( \alpha_k \right )
-    + \sum_k (\alpha_k - 1)\,\expect{q}{\log \theta_k} \\
-&=& \log \Gamma \left ( \sum_k \alpha_k \right )
-    - \sum_k \log \Gamma \left ( \alpha_k \right )
-    + \sum_k (\alpha_k - 1)\,
-    \left [ \Psi (\gamma_k) - \Psi \left(\sum_k \gamma_k\right) \right ]
-    \nonumber \\
-&=& \log \Gamma \left ( \sum_k \alpha_k \right )
-    - \sum_k \log \Gamma \left ( \alpha_k \right )
-    + \sum_k (\alpha_k - 1)\,\Psi (\gamma_k)
-    - \Psi \left(\sum_k \gamma_k\right)\,\sum_k (\alpha_k - 1)
-    \nonumber
+\expect{q}{\log p(\beta_k\,|\,\eta)} &=&
+\log \Gamma (J\,\eta) - \log \left ( J\,\Gamma(\eta) \right )
++ (\eta-1)\,\sum_{j=1}^J \expect{q}{\log\beta_{k,j}} \nonumber\\
+&=&
+\log \Gamma (J\,\eta) - \log \left ( J\,\Gamma(\eta) \right )
++ (\eta-1)\,\sum_{j=1}^J \left[ \Psi (\lambda_{k,j})
+- \Psi({\textstyle\sum}_{j=1}^J \lambda_{k,j}) \right] \quad.
 \end{eqnarray}
+A similar expression holds for $\expect{q}{\log p(\theta_d\,|\,\alpha)}$.
+
+For the document level expectations,
+\begin{eqnarray}
+\expect{q}{\log p(z_{d,n}\,|\,\theta_d)} &=&
+\expect{q}{\log \theta_{d,z_{d,n}}} \nonumber \\
+&=&
+\phi_{d,n}
+\left[\Psi (\gamma_{n,z_{d,n}}) - \Psi({\textstyle\sum}_{k=1}^K \gamma_{n,k})
+\right]
+\end{eqnarray}
+and
+\begin{eqnarray}
+\expect{q}{\log p(w_{d,n}\,|\,z_{d,n})} &=&
+\expect{q}{\log \beta_{z_{d,n},w_{d,n}}}
+\end{eqnarray}
+
 
 \end{document}
