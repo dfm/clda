@@ -82,12 +82,13 @@ class LDA(object):
     def rate(self, t):
         return (self.tau + t) ** -self.kappa
 
-    def em(self, corpus, ndocs=None, batch=10, maxiter=500, tol=1e-6):
+    def em(self, corpus, ndocs=None, batch=1024, maxiter=500, tol=1e-6):
         if ndocs is None:
             ndocs = len(corpus)
 
         t = 0
         documents = []
+        elbo = 0.0
         for document in corpus:
             # Accumulate documents in the batch until the batch size is
             # reached.
@@ -101,6 +102,9 @@ class LDA(object):
                       for d in documents]
             lam_new = self.eta + ndocs * lam_new / batch
 
+            # Estimate the ELBO.
+            elbo += self.elbo(documents, gammas=gammas, ndocs=ndocs)
+
             # Do the stochastic update.
             rho = self.rate(t)
             self.lam = (1-rho)*self.lam + rho*lam_new
@@ -108,7 +112,7 @@ class LDA(object):
             self.expelogbeta = np.exp(self.elogbeta)
 
             # Act as an iterator by yielding the evidence lower bound.
-            yield self.elbo(documents, gammas=gammas, ndocs=ndocs)
+            yield elbo / (t+1)
 
             # Finalize.
             t += 1
