@@ -144,7 +144,39 @@ be rewritten as
 \nonumber\\ &&  \left.
     +\expect{q}{\log p(\theta_d\,|\,\alpha)}
     -\expect{q}{\log q(\theta_d\,|\,\gamma_d)}
-\right \}
+\right \} \\
+&\equiv& \sum_d \ell_d (w,\lambda,\gamma_d,\phi_d) \quad.
+\end{eqnarray}
+Using the explicit distributions listed above and using constant $\eta_j =
+\eta$ and $\alpha_k = \alpha$, the per-document term can be rewritten as
+\begin{eqnarray}
+\ell_d (w,\lambda,\gamma_d,\phi_d) &=&
+[\log\Gamma(J\,\eta)-J\,\log\Gamma(\eta)]/D +
+\log\Gamma(K\,\alpha)-K\,\log\Gamma(\alpha)
+\nonumber \\
+&& +\sum_k\log\Gamma(\gamma_{d,k}) -
+\log\Gamma\left(\sum_k \gamma_{d,k}\right)
+\nonumber\\
+&& +\sum_{k=1}^K\left\{\frac{1}{D}\sum_j \log\Gamma(\lambda_j) -
+\frac{1}{D}\log\Gamma\left(\sum_j \lambda_j\right)
+\right. \nonumber\\
+&& \quad+\sum_{n=1}^{N_d} \phi_{d,n,k}\,\left(
+\expect{q}{\log\theta_{d,k}} + \expect{q}{\log\beta_{k,w_{d,n}}}
+-\log\phi_{d,n,k}
+\right)
+\nonumber\\
+&& \quad+ (\alpha-\gamma_{d,k})\,\expect{q}{\log\theta_{d,k}} +
+\left.\sum_{j=1}^J (\eta-\lambda_{k,j})\,\expect{q}{\log\beta_{k,j}}
+\right\} \quad.
+\end{eqnarray}
+
+Taking the gradient of this term and setting it to zero, we can find the
+variational update equations
+\begin{eqnarray}
+\phi_{d,n,k} &\gets& \frac{1}{Z} \exp \left(\expect{q}{\log\theta_{d,k}}
++\expect{q}{\log\beta_{k,n}}\right) \\
+\gamma_{d,k} &\gets& \alpha + \sum_n^{N_d} \phi_{d,n,k} \\
+\lambda_{k,n} &\gets& \eta + \sum_{d=1}^{D} \phi_{d,n,k}
 \end{eqnarray}
 
 \begin{figure}
