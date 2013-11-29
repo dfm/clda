@@ -8,99 +8,162 @@ __all__ = []
 
 import numpy as np
 import scipy.special as sp
+from scipy.misc import logsumexp
 
 
 def dirichlet_expectation(g):
-    return sp.psi(g) - sp.psi(np.sum(g, axis=-1))
+    if len(g.shape) == 1:
+        return sp.psi(g) - sp.psi(np.sum(g))
+    return sp.psi(g) - sp.psi(np.sum(g, axis=-1))[:, None]
 
 
-def vlda_inference(alpha, beta, document, gamma=None, maxiter=500, tol=1e-6):
-    ntopics, nvocab = beta.shape
-    assert ntopics == len(alpha), "Dimension mismatch"
-    gamma = np.ones_like(alpha)
-    for i in range(maxiter):
-        phi = np.exp(sp.psi(gamma))[:, None] * beta[:, document]
-        phi /= phi.sum(axis=0)[None, :]
-        gamma_new = alpha + phi.sum(axis=1)
-        delta = np.mean(np.abs(gamma_new - gamma))
-        gamma = np.array(gamma_new)
-        if delta < tol:
-            break
-    return gamma, phi
+class OVLDA(object):
 
+    def __init__(self, ntopics, nvocab, alpha, eta, tau=1024., kappa=0.5):
+        self.ntopics = ntopics
+        self.nvocab = nvocab
+        self.alpha = alpha
+        self.eta = eta
+        self.tau = tau
+        self.kappa = kappa
 
-def vlda_em(nvocab, alpha, corpus, eta=0.01, maxiter=50, tol=1e-4,
-            maxinf=500, tolinf=1e-6):
-    ntopics = len(alpha)
-    beta = np.random.rand(ntopics*nvocab).reshape((ntopics, nvocab))
-    beta /= beta.sum(axis=1)[:, None]
+        # Randomly initialize the lambda matrix.
+        self.lam = np.random.gamma(100., 1./100., (self.ntopics, nvocab))
+        self.elogbeta = dirichlet_expectation(self.lam)
+        self.expelogbeta = np.exp(self.elogbeta)
 
-    # Expectation step.
-    norm = sum([len(d) for d in corpus])
-    old_perplex = None
-    for i in range(maxiter):
-        beta_new = eta + np.zeros_like(beta)
-        perplex = 0.0
+    def sample(self, size, rate=100):
+        # Generate topic distributions.
+        beta = np.random.dirichlet(self.eta*np.ones(self.nvocab),
+                                   self.ntopics)
+        theta = np.random.dirichlet(self.alpha*np.ones(self.ntopics), size)
+        nwords = np.random.poisson(rate, size)
+
+        # Generate documents.
+        docs = []
+        for d, (n, th) in enumerate(zip(nwords, theta)):
+            zs = np.random.multinomial(n, th)
+            docs.append([w for i, z in enumerate(zs)
+                         for w, c in enumerate(np.random.multinomial(z,
+                                                                     beta[i]))
+                         for j in range(c)])
+
+        return docs, theta
+
+    def infer(self, document, stats=None, maxiter=500, tol=1e-6):
+        gamma = np.random.gamma(100., 1./100., self.ntopics)
+
+        # Pre-compute the beta expectation.
+        expelogbeta = self.expelogbeta[:, document]
+
+        # Iterate between phi and gamma updates.
+        delta = None
+        for i in range(maxiter):
+            # Update phi stats.
+            expelogth = np.exp(dirichlet_expectation(gamma))
+            norm = np.dot(expelogth, expelogbeta)
+
+            # Check for convergence.
+            if i > 0 and delta < tol:
+                break
+
+            # Update the vectors.
+            gamma_new = (self.alpha
+                         + expelogth * np.sum(expelogbeta/norm[None, :], 1))
+            delta = np.mean(np.abs(gamma_new - gamma))
+            gamma = np.array(gamma_new)
+
+        # Update the sufficient stats.
+        if stats is not None:
+            stats[:, document] += (expelogbeta * expelogth[:, None]) / norm
+
+        return gamma
+
+    def rate(self, t):
+        return (self.tau + t) ** -self.kappa
+
+    def em(self, corpus, ndocs=None, batch=10, maxiter=500, tol=1e-6):
+        if ndocs is None:
+            ndocs = len(corpus)
+
+        t = 0
+        documents = []
         for document in corpus:
-            gamma, stats = vlda_inference(alpha, beta, document,
-                                          maxiter=maxinf, tol=tolinf)
+            # Accumulate documents in the batch until the batch size is
+            # reached.
+            documents.append(document)
+            if len(documents) < batch:
+                continue
 
-            # Maximization update on beta.
-            beta_new[:, document] += stats
+            # Run the expectation step.
+            lam_new = np.zeros_like(self.lam)
+            gammas = [self.infer(d, stats=lam_new, maxiter=maxiter, tol=tol)
+                      for d in documents]
+            lam_new = self.eta + ndocs * lam_new / batch
 
-            perplex += approx_perplexity(alpha, beta, document, gamma=gamma,
-                                         stats=stats)
+            # Do the stochastic update.
+            rho = self.rate(t)
+            self.lam = (1-rho)*self.lam + rho*lam_new
+            self.elogbeta = dirichlet_expectation(self.lam)
+            self.expelogbeta = np.exp(self.elogbeta)
 
-        # Update the beta matrix.
-        beta = np.array(beta_new)
+            # Act as an iterator by yielding the evidence lower bound.
+            yield self.elbo(documents, gammas=gammas, ndocs=ndocs)
 
-        # Check for convergence.
-        perplex = np.exp(perplex/norm)
-        print("perplexity = {0}".format(perplex))
-        if i > 0 and np.abs(perplex - old_perplex) < tol:
-            break
-        old_perplex = perplex
+            # Finalize.
+            t += 1
+            documents = []
 
-    return beta
+    def elbo(self, documents, gammas=None, ndocs=None, maxiter=500, tol=1e-6):
+        if ndocs is None:
+            ndocs = len(documents)
+
+        # Run the inference if the variational parameters are not provided.
+        if gammas is None:
+            gammas = [self.infer(d, maxiter=maxiter, tol=tol)
+                      for d in documents]
+
+        # Loop over documents and compute the approximate bound.
+        elbo = sp.gammaln(self.nvocab*self.eta)
+        elbo -= self.nvocab*sp.gammaln(self.eta)
+        elbo += np.sum(sp.gammaln(self.lam))
+        elbo -= np.sum(sp.gammaln(np.sum(self.lam, axis=1)))
+        elbo += np.sum((self.eta - self.lam) * self.elogbeta)
+        elbo /= ndocs
+
+        elbo += sp.gammaln(self.ntopics*self.alpha)
+        elbo -= self.ntopics*sp.gammaln(self.alpha)
+        elbo *= len(documents)
+
+        elbo += np.sum(np.sum(sp.gammaln(gammas), axis=1)
+                       - sp.gammaln(np.sum(gammas, axis=1)))
+
+        for doc, gamma in zip(documents, gammas):
+            elogbeta = self.elogbeta[:, doc]
+            elogth = dirichlet_expectation(gamma)
+            lnphi = elogth[:, None] + elogbeta
+            lnnorm = logsumexp(lnphi, axis=0)
+            elbo += np.sum(np.exp(lnphi-lnnorm)*(elogth[:, None] + elogbeta
+                                                 - lnphi + lnnorm))
+            elbo += np.sum((self.alpha-gamma)*elogth)
+
+        return elbo
 
 
-def ovlda_em(nvocab, alpha, corpus, eta=0.01, maxiter=50, tol=1e-3,
-             maxinf=500, tolinf=1e-6):
-    ntopics = len(alpha)
-    beta = np.random.rand(ntopics*nvocab).reshape((ntopics, nvocab))
-    beta /= beta.sum(axis=1)[:, None]
+class TestCorpus(object):
 
+    def __init__(self, documents):
+        self.ndocs = len(documents)
+        self.documents = documents
 
-def approx_perplexity(alpha, beta, document, gamma=None, stats=None,
-                      maxiter=500, tol=1e-6):
-    if gamma is None or stats is None:
-        gamma, stats = vlda_inference(alpha, beta, document, maxiter=maxiter,
-                                      tol=tol)
+    def __len__(self):
+        return self.ndocs
 
-    psi = sp.psi(gamma) - sp.psi(np.sum(gamma))
-    lnlike = sp.gammaln(np.sum(alpha)) - np.sum(sp.gammaln(alpha))
-    lnlike += np.sum((alpha - 1) * psi)
-    lnlike += np.sum(stats*psi[:, None])
-    lnlike += np.sum(stats*np.log(beta[:, document]))
+    def __iter__(self):
+        return self
 
-    lnlike -= sp.gammaln(np.sum(gamma)) - np.sum(sp.gammaln(gamma))
-    lnlike -= np.sum((gamma - 1) * psi)
-    lnlike -= np.sum(stats*np.log(stats))
-
-    return -lnlike
-
-
-def generate_document(alpha, beta, nwords):
-    # Generate a test document.
-    theta = np.array([np.random.gamma(a) for a in alpha])
-    theta /= theta.sum()
-    z = np.array([int(np.arange(nvocab)[i])
-                 for i in np.array(np.random.multinomial(1, theta, nwords),
-                                   dtype=bool)])
-    document = np.array([np.argmax(np.random.multinomial(1, d))
-                         for d in beta[z, :]])
-
-    return document
+    def next(self):
+        return self.documents[np.random.randint(self.ndocs)]
 
 
 if __name__ == "__main__":
@@ -108,26 +171,10 @@ if __name__ == "__main__":
     ntopics = 10
     nvocab = 5000
 
-    # Set up the test distribution.
-    alpha = np.random.rand(ntopics)
-    alpha /= alpha.sum()
-    beta = np.random.rand(ntopics*nvocab).reshape((ntopics, nvocab))
-    beta /= beta.sum(axis=1)[:, None]
+    model = OVLDA(ntopics, nvocab, 0.01, 0.01)
+    print("Generating corpus...")
+    corpus, true_theta = model.sample(500)
+    print("Done.")
 
-    # Generate a corpus.
-    corpus = [generate_document(alpha, beta, np.random.poisson(100))
-              for i in range(100)]
-
-    test_corpus = [generate_document(alpha, beta, np.random.poisson(100))
-                   for i in range(100)]
-
-    perplex = sum([approx_perplexity(alpha, beta, d) for d in test_corpus])
-    perplex = np.exp(perplex / sum([len(d) for d in test_corpus]))
-    print("True test perplexity = {0}".format(perplex))
-
-    # Run EM.
-    new_beta = vlda_em(nvocab, alpha, corpus)
-
-    perplex = sum([approx_perplexity(alpha, new_beta, d) for d in test_corpus])
-    perplex = np.exp(perplex / sum([len(d) for d in test_corpus]))
-    print("Final test perplexity = {0}".format(perplex))
+    for elbo in model.em(TestCorpus(corpus)):
+        print(elbo)

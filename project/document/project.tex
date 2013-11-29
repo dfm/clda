@@ -176,8 +176,18 @@ variational update equations
 \phi_{d,n,k} &\gets& \frac{1}{Z} \exp \left(\expect{q}{\log\theta_{d,k}}
 +\expect{q}{\log\beta_{k,n}}\right) \\
 \gamma_{d,k} &\gets& \alpha + \sum_n^{N_d} \phi_{d,n,k} \\
-\lambda_{k,n} &\gets& \eta + \sum_{d=1}^{D} \phi_{d,n,k}
+\lambda_{k,n} &\gets& \eta + \sum_{d=1}^{D} \phi_{d,n,k} \quad.
 \end{eqnarray}
+
+Finally, the expectations of the latent variables under the variational
+distribution are
+\begin{eqnarray}
+\expect{q}{\log\theta_{d,k}} &=& \Psi(\gamma_{d,k})
+    - \Psi\left(\sum_k \gamma_{d,k}\right) \\
+\expect{q}{\log\beta_{k,n}} &=& \Psi(\lambda_{k,n})
+    - \Psi\left(\sum_n \gamma_{k,n}\right)
+\end{eqnarray}
+where $\Psi$ is the derivative of the logarithm of the gamma function.
 
 \begin{figure}
 \begin{center}
