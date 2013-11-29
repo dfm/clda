@@ -4,7 +4,7 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = []
+__all__ = ["LDA"]
 
 import numpy as np
 import scipy.special as sp
@@ -17,7 +17,7 @@ def dirichlet_expectation(g):
     return sp.psi(g) - sp.psi(np.sum(g, axis=-1))[:, None]
 
 
-class OVLDA(object):
+class LDA(object):
 
     def __init__(self, ntopics, nvocab, alpha, eta, tau=1024., kappa=0.5):
         self.ntopics = ntopics
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     ntopics = 10
     nvocab = 5000
 
-    model = OVLDA(ntopics, nvocab, 0.01, 0.01)
+    model = LDA(ntopics, nvocab, 0.01, 0.01)
     print("Generating corpus...")
     corpus, true_theta = model.sample(500)
     print("Done.")
