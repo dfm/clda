@@ -19,13 +19,15 @@ def dirichlet_expectation(g):
 
 class LDA(object):
 
-    def __init__(self, ntopics, nvocab, alpha, eta, tau=1024., kappa=0.5):
+    def __init__(self, ntopics, nvocab, alpha, eta, tau=1024., kappa=0.5,
+                 pool=None):
         self.ntopics = ntopics
         self.nvocab = nvocab
         self.alpha = alpha
         self.eta = eta
         self.tau = tau
         self.kappa = kappa
+        self.pool = pool
 
         # Randomly initialize the lambda matrix.
         self.lam = np.random.gamma(100., 1./100., (self.ntopics, nvocab))
@@ -50,7 +52,7 @@ class LDA(object):
 
         return docs, theta
 
-    def infer(self, document, stats=None, maxiter=500, tol=1e-6):
+    def infer(self, document, stats=False, maxiter=500, tol=1e-6):
         gamma = np.random.gamma(100., 1./100., self.ntopics)
 
         # Pre-compute the beta expectation.
@@ -74,15 +76,17 @@ class LDA(object):
             gamma = np.array(gamma_new)
 
         # Update the sufficient stats.
-        if stats is not None:
-            stats[:, document] += (expelogbeta * expelogth[:, None]) / norm
+        if stats:
+            return gamma, (expelogbeta * expelogth[:, None]) / norm
 
         return gamma
 
     def rate(self, t):
         return (self.tau + t) ** -self.kappa
 
-    def em(self, corpus, ndocs=None, batch=1024, maxiter=500, tol=1e-6):
+    def em(self, corpus, ndocs=None, batch=1024, maxiter=500, tol=1e-6,
+           approx_bound=False, pool=None):
+        M = map if pool is None else pool.map
         if ndocs is None:
             ndocs = len(corpus)
 
@@ -98,12 +102,13 @@ class LDA(object):
 
             # Run the expectation step.
             lam_new = np.zeros_like(self.lam)
-            gammas = [self.infer(d, stats=lam_new, maxiter=maxiter, tol=tol)
-                      for d in documents]
+            gammas, stats = zip(*M(_function_wrapper(self, "infer",
+                                                     stats=True,
+                                                     maxiter=maxiter, tol=tol),
+                                   documents))
+            for d, s in zip(documents, stats):
+                lam_new[:, d] += s
             lam_new = self.eta + ndocs * lam_new / batch
-
-            # Estimate the ELBO.
-            elbo += self.elbo(documents, gammas=gammas, ndocs=ndocs)
 
             # Do the stochastic update.
             rho = self.rate(t)
@@ -111,21 +116,31 @@ class LDA(object):
             self.elogbeta = dirichlet_expectation(self.lam)
             self.expelogbeta = np.exp(self.elogbeta)
 
-            # Act as an iterator by yielding the evidence lower bound.
-            yield elbo / (t+1)
-
             # Finalize.
             t += 1
             documents = []
 
-    def elbo(self, documents, gammas=None, ndocs=None, maxiter=500, tol=1e-6):
+            # Estimate an approximate ELBO.
+            if approx_bound:
+                elbo += self.elbo(documents, gammas=gammas, ndocs=ndocs,
+                                  pool=pool)
+                yield t*batch, self.lam, elbo / t
+            else:
+                yield t*batch, self.lam
+
+    def elbo(self, documents, gammas=None, ndocs=None, maxiter=500, tol=1e-6,
+             pool=None):
+        M = map if pool is None else pool.map
+
         if ndocs is None:
             ndocs = len(documents)
 
         # Run the inference if the variational parameters are not provided.
         if gammas is None:
-            gammas = [self.infer(d, maxiter=maxiter, tol=tol)
-                      for d in documents]
+            gammas = M(_function_wrapper(self, "infer", maxiter=maxiter,
+                                         tol=tol), documents)
+            # gammas = [self.infer(d, maxiter=maxiter, tol=tol)
+            #           for d in documents]
 
         # Loop over documents and compute the approximate bound.
         elbo = sp.gammaln(self.nvocab*self.eta)
@@ -142,15 +157,20 @@ class LDA(object):
         elbo += np.sum(np.sum(sp.gammaln(gammas), axis=1)
                        - sp.gammaln(np.sum(gammas, axis=1)))
 
-        for doc, gamma in zip(documents, gammas):
-            elogbeta = self.elogbeta[:, doc]
-            elogth = dirichlet_expectation(gamma)
-            lnphi = elogth[:, None] + elogbeta
-            lnnorm = logsumexp(lnphi, axis=0)
-            elbo += np.sum(np.exp(lnphi-lnnorm)*(elogth[:, None] + elogbeta
-                                                 - lnphi + lnnorm))
-            elbo += np.sum((self.alpha-gamma)*elogth)
+        elbo += np.sum(M(_function_wrapper(self, "elbo_one"),
+                       zip(documents, gammas)))
 
+        return elbo
+
+    def elbo_one(self, args):
+        doc, gamma = args
+        elogbeta = self.elogbeta[:, doc]
+        elogth = dirichlet_expectation(gamma)
+        lnphi = elogth[:, None] + elogbeta
+        lnnorm = logsumexp(lnphi, axis=0)
+        elbo = np.sum(np.exp(lnphi-lnnorm)*(elogth[:, None] + elogbeta
+                                            - lnphi + lnnorm))
+        elbo += np.sum((self.alpha-gamma)*elogth)
         return elbo
 
 
@@ -168,6 +188,18 @@ class TestCorpus(object):
 
     def next(self):
         return self.documents[np.random.randint(self.ndocs)]
+
+
+class _function_wrapper(object):
+
+    def __init__(self, target, attr, *args, **kwargs):
+        self.target = target
+        self.attr = attr
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, v):
+        return getattr(self.target, self.attr)(v, *self.args, **self.kwargs)
 
 
 if __name__ == "__main__":
