@@ -62,17 +62,17 @@ class ArxivReader(object):
                                      key=operator.itemgetter(1),
                                      reverse=True)[skip:skip+nvocab]]
 
-    def load_vocab(self, fn, skip=100, nvocab=8000):
+    def load_vocab(self, fn, skip=0, nvocab=None):
         self.vocab = {}
+        self.vocab_list = []
         with open(fn, "r") as f:
-            i = 0
             for count, w in enumerate(f):
                 if count < skip:
                     continue
-                if count >= nvocab:
+                self.vocab_list.append(w.strip())
+                self.vocab[w.strip()] = len(self.vocab_list) - 1
+                if nvocab is not None and len(self.vocab_list) >= nvocab:
                     break
-                self.vocab[w.strip()] = i
-                i += 1
 
     def __iter__(self):
         for doc in self.iter_docs():
