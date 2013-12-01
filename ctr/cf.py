@@ -6,6 +6,8 @@ from __future__ import (division, print_function, absolute_import,
 
 import numpy as np
 
+from . import _cf
+
 
 class CF(object):
 
@@ -42,19 +44,21 @@ class CF(object):
     def learn(self, events, pool=None):
         [self.add_event(*evt) for evt in events]
 
+        _cf.update(self.U, self.V, self.user_items, self.item_users)
+
         # Initialize the matrices.
-        self.V = np.random.rand(self.nitems, self.ntopics)
-        self.U = np.random.rand(self.nusers, self.ntopics)
+        # self.V = np.random.rand(self.nitems, self.ntopics)
+        # self.U = np.random.rand(self.nusers, self.ntopics)
 
         # Update the users.
-        print("Updating users")
-        self.VTV = np.dot(self.V.T, self.V)
-        map(self.update_user, range(self.nusers))
+        # print("Updating users")
+        # self.VTV = np.dot(self.V.T, self.V)
+        # map(self.update_user, range(self.nusers))
 
-        # Update the items.
-        print("Updating items")
-        self.UTU = np.dot(self.U.T, self.U)
-        map(self.update_item, range(self.nitems))
+        # # Update the items.
+        # print("Updating items")
+        # self.UTU = np.dot(self.U.T, self.U)
+        # map(self.update_item, range(self.nitems))
 
         print(self.recall(pool=pool))
         assert 0
@@ -98,16 +102,3 @@ class _function_wrapper(object):
 
     def __call__(self, v):
         return getattr(self.target, self.attr)(v, *self.args, **self.kwargs)
-
-
-if __name__ == "__main__":
-    import sqlite3
-    from multiprocessing import Pool
-    with sqlite3.connect("data/abstracts.db") as connection:
-        c = connection.cursor()
-        c.execute("SELECT user_id,arxiv_id FROM activity")
-        activity = c.fetchall()
-
-    model = CF(100)
-    pool = Pool()
-    model.learn(activity, pool=pool)

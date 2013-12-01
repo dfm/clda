@@ -1,11 +1,13 @@
-import numpy as np
-from ctr import _cf
+from ctr.cf import CF
 
-U = np.random.rand(5, 2)
-V = np.random.rand(10, 2)
+if __name__ == "__main__":
+    import sqlite3
+    from multiprocessing import Pool
+    with sqlite3.connect("data/abstracts.db") as connection:
+        c = connection.cursor()
+        c.execute("SELECT user_id,arxiv_id FROM activity")
+        activity = c.fetchall()
 
-print(V)
-
-user_items = [[4, 5], [3], [6, 8], [6, 5, 8], [1, 0, 5]]
-
-_cf.update(U, V, user_items)
+    model = CF(100)
+    pool = Pool()
+    model.learn(activity, pool=pool)

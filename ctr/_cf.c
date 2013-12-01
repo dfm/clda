@@ -18,8 +18,9 @@ static struct module_state _state;
 
 static PyObject *cf_update (PyObject *self, PyObject *args)
 {
-    PyObject *V_obj, *U_obj, *user_items;
-    if (!PyArg_ParseTuple(args, "OOO", &U_obj, &V_obj, &user_items))
+    PyObject *V_obj, *U_obj, *user_items, *item_users;
+    if (!PyArg_ParseTuple(args, "OOOO", &U_obj, &V_obj, &user_items,
+                          &item_users))
         return NULL;
 
     PyArrayObject *V_array = PARSE_ARRAY(V_obj),
@@ -48,14 +49,14 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
 
     int i, j, k, l, uid, ione = 1, *ipiv = malloc(ntopics*sizeof(int)), info;
     long el;
-    double val, alpha = 40.0, l2u = 0.1;
+    double val, alpha = 40.0, l2u = 0.1, l2v = 0.1;
     for (uid = 0; uid < nusers; ++uid) {
         PyObject *items = PyList_GetItem(user_items, uid);
         l = (int)PyList_Size(items);
 
         double *m = malloc(ntopics*ntopics*sizeof(double)),
                *b = malloc(ntopics*sizeof(double));
-        for (i = 0; i < ntopics*ntopics; ++i) m[i] = V[i];
+        for (i = 0; i < ntopics*ntopics; ++i) m[i] = VTV[i];
         for (i = 0; i < ntopics; ++i) b[i] = 0.0;
 
         for (i = 0; i < l; ++i) {
@@ -63,7 +64,7 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
             for (j = 0; j < ntopics; ++j) {
                 b[j] += alpha*V[el*ntopics+j];
                 m[j*ntopics+j] += alpha*V[el*ntopics+j]*V[el*ntopics+j]+l2u;
-                for (k = j+1; j < ntopics; ++j) {
+                for (k = j+1; k < ntopics; ++k) {
                     val = alpha * V[el*ntopics+j] * V[el*ntopics+k];
                     m[j*ntopics+k] += val;
                     m[k*ntopics+j] += val;
@@ -71,12 +72,38 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
             }
         }
 
-        for (i = 0; i < ntopics; ++i) printf("%f ", b[i]);
-        printf("\n");
         dgesv_(&ntopics, &ione, m, &ntopics, ipiv, b, &ntopics, &info);
-        printf("info = %d\n", info);
-        for (i = 0; i < ntopics; ++i) printf("%f ", b[i]);
-        printf("\n");
+        for (i = 0; i < ntopics; ++i) U[uid*ntopics+i] = b[i];
+
+        free(b);
+        free(m);
+    }
+
+    int iid;
+    for (iid = 0; iid < nitems; ++iid) {
+        PyObject *users = PyList_GetItem(item_users, iid);
+        l = (int)PyList_Size(users);
+
+        double *m = malloc(ntopics*ntopics*sizeof(double)),
+               *b = malloc(ntopics*sizeof(double));
+        for (i = 0; i < ntopics*ntopics; ++i) m[i] = UTU[i];
+        for (i = 0; i < ntopics; ++i) b[i] = 0.0;
+
+        for (i = 0; i < l; ++i) {
+            el = PyInt_AsLong(PyList_GetItem(users, i));
+            for (j = 0; j < ntopics; ++j) {
+                b[j] += alpha*U[el*ntopics+j];
+                m[j*ntopics+j] += alpha*U[el*ntopics+j]*U[el*ntopics+j]+l2v;
+                for (k = j+1; k < ntopics; ++k) {
+                    val = alpha * U[el*ntopics+j] * U[el*ntopics+k];
+                    m[j*ntopics+k] += val;
+                    m[k*ntopics+j] += val;
+                }
+            }
+        }
+
+        dgesv_(&ntopics, &ione, m, &ntopics, ipiv, b, &ntopics, &info);
+        for (i = 0; i < ntopics; ++i) V[iid*ntopics+i] = b[i];
 
         free(b);
         free(m);
