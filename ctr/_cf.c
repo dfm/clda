@@ -14,7 +14,7 @@ static struct module_state _state;
 #endif
 
 #define PARSE_ARRAY(o) (PyArrayObject*) PyArray_FROM_OTF(o, NPY_DOUBLE, \
-        NPY_IN_ARRAY)
+        NPY_INOUT_ARRAY)
 
 static PyObject *cf_update (PyObject *self, PyObject *args)
 {
@@ -43,13 +43,13 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
     char n = 'N', t = 'T';
     double one = 1.0, zero = 0.0;
 
-    // Pre-compute U^T.U.
-    dgemm_(&n, &t, &ntopics, &ntopics, &nusers, &one, U, &ntopics, U,
-           &ntopics, &zero, UTU, &ntopics);
+    // Pre-compute V^T.V.
+    dgemm_(&n, &t, &ntopics, &ntopics, &nitems, &one, V, &ntopics, V,
+           &ntopics, &zero, VTV, &ntopics);
 
     int i, j, k, l, uid, ione = 1, *ipiv = malloc(ntopics*sizeof(int)), info;
     long el;
-    double val, alpha = 40.0, l2u = 0.1, l2v = 0.1;
+    double val, alpha = 1.0, l2u = 0.01, l2v = 0.01;
     for (uid = 0; uid < nusers; ++uid) {
         PyObject *items = PyList_GetItem(user_items, uid);
         l = (int)PyList_Size(items);
@@ -57,15 +57,18 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
         double *m = malloc(ntopics*ntopics*sizeof(double)),
                *b = malloc(ntopics*sizeof(double));
         for (i = 0; i < ntopics*ntopics; ++i) m[i] = VTV[i];
-        for (i = 0; i < ntopics; ++i) b[i] = 0.0;
+        for (i = 0; i < ntopics; ++i) {
+            b[i] = 0.0;
+            m[i*ntopics+i] += l2u;
+        }
 
         for (i = 0; i < l; ++i) {
             el = PyInt_AsLong(PyList_GetItem(items, i));
             for (j = 0; j < ntopics; ++j) {
-                b[j] += alpha*V[el*ntopics+j];
-                m[j*ntopics+j] += alpha*V[el*ntopics+j]*V[el*ntopics+j]+l2u;
+                b[j] += (1+alpha)*V[el*ntopics+j];
+                m[j*ntopics+j] += alpha*V[el*ntopics+j]*V[el*ntopics+j];
                 for (k = j+1; k < ntopics; ++k) {
-                    val = alpha * V[el*ntopics+j] * V[el*ntopics+k];
+                    val = alpha*V[el*ntopics+j]*V[el*ntopics+k];
                     m[j*ntopics+k] += val;
                     m[k*ntopics+j] += val;
                 }
@@ -79,6 +82,10 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
         free(m);
     }
 
+    // Pre-compute U^T.U.
+    dgemm_(&n, &t, &ntopics, &ntopics, &nusers, &one, U, &ntopics, U,
+           &ntopics, &zero, UTU, &ntopics);
+
     int iid;
     for (iid = 0; iid < nitems; ++iid) {
         PyObject *users = PyList_GetItem(item_users, iid);
@@ -87,15 +94,18 @@ static PyObject *cf_update (PyObject *self, PyObject *args)
         double *m = malloc(ntopics*ntopics*sizeof(double)),
                *b = malloc(ntopics*sizeof(double));
         for (i = 0; i < ntopics*ntopics; ++i) m[i] = UTU[i];
-        for (i = 0; i < ntopics; ++i) b[i] = 0.0;
+        for (i = 0; i < ntopics; ++i) {
+            b[i] = 0.0;
+            m[i*ntopics+i] += l2v;
+        }
 
         for (i = 0; i < l; ++i) {
             el = PyInt_AsLong(PyList_GetItem(users, i));
             for (j = 0; j < ntopics; ++j) {
-                b[j] += alpha*U[el*ntopics+j];
-                m[j*ntopics+j] += alpha*U[el*ntopics+j]*U[el*ntopics+j]+l2v;
+                b[j] += (1+alpha)*U[el*ntopics+j];
+                m[j*ntopics+j] += alpha*U[el*ntopics+j]*U[el*ntopics+j];
                 for (k = j+1; k < ntopics; ++k) {
-                    val = alpha * U[el*ntopics+j] * U[el*ntopics+k];
+                    val = alpha*U[el*ntopics+j]*U[el*ntopics+k];
                     m[j*ntopics+k] += val;
                     m[k*ntopics+j] += val;
                 }

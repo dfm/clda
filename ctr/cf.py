@@ -44,11 +44,15 @@ class CF(object):
     def learn(self, events, pool=None):
         [self.add_event(*evt) for evt in events]
 
-        _cf.update(self.U, self.V, self.user_items, self.item_users)
-
         # Initialize the matrices.
-        # self.V = np.random.rand(self.nitems, self.ntopics)
-        # self.U = np.random.rand(self.nusers, self.ntopics)
+        self.V = np.random.rand(self.nitems, self.ntopics)
+        self.U = np.random.rand(self.nusers, self.ntopics)
+        for i in range(50):
+            print("Updating")
+            u0 = np.array(self.U)
+            _cf.update(self.U, self.V, self.user_items, self.item_users)
+            print(np.mean(np.abs(self.U - u0)))
+            print(self.recall(pool=pool))
 
         # Update the users.
         # print("Updating users")
@@ -59,8 +63,6 @@ class CF(object):
         # print("Updating items")
         # self.UTU = np.dot(self.U.T, self.U)
         # map(self.update_item, range(self.nitems))
-
-        print(self.recall(pool=pool))
         assert 0
 
     def recall(self, pool=None, M=100):
