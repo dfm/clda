@@ -6,3 +6,5 @@ src
 build
 *.so
 *.log
+data
+results

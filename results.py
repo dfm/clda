@@ -8,7 +8,7 @@ import os
 import argparse
 import numpy as np
 
-# from nlp.lda import LDA
+from nlp.lda import dirichlet_expectation
 from nlp.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Show OVLDA results")
@@ -21,7 +21,8 @@ if __name__ == "__main__":
     reader.load_vocab(os.path.join(args.outdir, "vocab.txt"))
 
     lam = np.loadtxt(args.lam)
-    for i, topics in enumerate(lam):
+    lnbeta = dirichlet_expectation(lam)
+    for i, topics in enumerate(lnbeta):
         inds = np.argsort(topics)
-        print("Topic {0}: ".format(i) +
+        print("Topic {0:3d}: ".format(i) +
               " ".join([reader.vocab_list[i] for i in inds[-10:]]))

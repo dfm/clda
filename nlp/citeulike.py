@@ -7,6 +7,7 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = ["parse_linkouts"]
 
 import re
+import sqlite3
 from collections import defaultdict
 
 
@@ -82,9 +83,29 @@ def parse_users(fn, linkouts):
 
 
 if __name__ == "__main__":
-    linkouts = parse_linkouts("citeulike/arxiv")
+    linkouts = parse_linkouts("data/arxiv")
     print("{0} unique articles.".format(len(set(linkouts.values()))))
 
-    users, count = parse_users("citeulike/current", linkouts)
+    users, count = parse_users("data/current", linkouts)
     print("{0} unique users".format(len(users)))
     print("{0} user-article pairs".format(count))
+
+    # Update the database.
+    connection = sqlite3.connect("data/abstracts.db")
+    c = connection.cursor()
+    c.execute("PRAGMA foreign_keys = ON")
+    # c.execute("DROP TABLE activity")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS activity(
+        user_id  TEXT,
+        arxiv_id INTEGER REFERENCES articles
+    )""")
+
+    for u, arxiv_ids in users.iteritems():
+        arxiv_ids = [i if "/" not in i else
+                     i.split("/")[0].split(".")[0]+"/"+i.split("/")[1]
+                     for i in arxiv_ids]
+        c.executemany("""INSERT INTO activity (user_id,arxiv_id)
+                         VALUES (?,(SELECT id FROM articles WHERE arxiv_id=?))
+                      """, [(u, i) for i in arxiv_ids])
+        connection.commit()

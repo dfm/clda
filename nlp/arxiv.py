@@ -4,11 +4,9 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = []
+__all__ = ["ArxivReader"]
 
-import os
-import glob
-import gzip
+import sqlite3
 import operator
 import numpy as np
 from collections import defaultdict
@@ -16,21 +14,22 @@ from collections import defaultdict
 
 class ArxivReader(object):
 
-    def __init__(self, basepath):
-        # Construct the list of files.
-        self.files = glob.glob(os.path.join(basepath, "*", "*.txt.gz"))
-        self.nfiles = len(self.files)
-        assert self.nfiles, "Couldn't find any data files"
+    def __init__(self, dbpath):
+        self.dbpath = dbpath
+        with sqlite3.connect(dbpath) as connection:
+            c = connection.cursor()
+            c.execute("SELECT count(*) FROM abstracts")
+            self.nfiles = int(c.fetchone()[0])
         self.validation_set = []
-
-    def read_random_file(self):
-        with gzip.open(self.files[np.random.randint(self.nfiles)]) as f:
-            return [line.split("\t") for line in f]
 
     def iter_docs(self):
         while True:
-            for doc in self.read_random_file():
-                yield doc
+            with sqlite3.connect(self.dbpath) as connection:
+                c = connection.cursor()
+                c.execute("SELECT * FROM abstracts WHERE rowid=?",
+                          (np.random.randint(self.nfiles), ))
+                doc = c.fetchone()
+            yield doc
 
     def validation(self, n):
         docs = []
@@ -51,23 +50,22 @@ class ArxivReader(object):
                 for w in doc[2].split()+doc[3].split()
                 if w.lower() in self.vocab]
 
-    def generate_vocab(self, ndocs, skip=0, nvocab=50000):
+    def generate_vocab(self):
         vocab = defaultdict(int)
-        for count, doc in enumerate(self.iter_docs()):
-            for w in doc[2].split()+doc[3].split():
-                vocab[w.lower()] += 1
-            if count >= ndocs:
-                break
-        return [w for w, v in sorted(vocab.iteritems(),
-                                     key=operator.itemgetter(1),
-                                     reverse=True)[skip:skip+nvocab]]
+        with sqlite3.connect(self.dbpath) as connection:
+            c = connection.cursor()
+            for doc in c.execute("SELECT * FROM abstracts"):
+                for w in doc[2].split()+doc[3].split():
+                    vocab[w.lower()] += 1
+        return sorted(vocab.iteritems(), key=operator.itemgetter(1),
+                      reverse=True)
 
     def load_vocab(self, fn, skip=0, nvocab=None):
         self.vocab = {}
         self.vocab_list = []
         with open(fn, "r") as f:
-            for count, w in enumerate(f):
-                if count < skip:
+            for i, (w, count) in enumerate(f):
+                if i < skip:
                     continue
                 self.vocab_list.append(w.strip())
                 self.vocab[w.strip()] = len(self.vocab_list) - 1
@@ -82,8 +80,18 @@ class ArxivReader(object):
             if len(words):
                 yield words
 
+    def __getitem__(self, arxiv_id):
+        with sqlite3.connect(self.dbpath) as connection:
+            c = connection.cursor()
+            c.execute("SELECT * FROM abstracts WHERE arxiv_id=?",
+                      (arxiv_id, ))
+            doc = c.fetchone()
+        if doc is None:
+            raise ValueError("No abstract with id='{0}'".format(arxiv_id))
+        return doc
+
 
 if __name__ == "__main__":
-    reader = ArxivReader("/export/bbq1/dfm/research/data.arxiv.io/data")
-    reader.load_vocab("vocab.txt")
-    # open("vocab.txt", "w").write("\n".join(reader.generate_vocab(500000)))
+    reader = ArxivReader("data/abstracts.db")
+    open("data/vocab.txt", "w").write("\n".join(map("{0[0]} {0[1]}".format,
+                                                    reader.generate_vocab())))
