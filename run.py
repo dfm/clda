@@ -10,8 +10,8 @@ import argparse
 import numpy as np
 from multiprocessing import Pool
 
-from nlp.lda import LDA
-from nlp.arxiv import ArxivReader
+from ctr.lda import LDA
+from ctr.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Run OVLDA on the arxiv")
 parser.add_argument("outdir", help="The results directory")

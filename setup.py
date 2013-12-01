@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import numpy
 from setuptools import setup, Extension
 
+ext = Extension("ctr._cf", ["ctr/_cf.c"],
+                include_dirs=[numpy.get_include(), "ctr"])
+
 setup(
-    name="nlp",
-    ext_modules=[
-        Extension("hw3._viterbi", ["hw3/_viterbi.c"]),
-    ],
+    name="str",
+    ext_modules=[ext],
 )

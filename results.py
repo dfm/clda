@@ -8,8 +8,8 @@ import os
 import argparse
 import numpy as np
 
-from nlp.lda import dirichlet_expectation
-from nlp.arxiv import ArxivReader
+from ctr.lda import dirichlet_expectation
+from ctr.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Show OVLDA results")
 parser.add_argument("outdir", help="The results directory")
