@@ -18,8 +18,7 @@ from ctr.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Run OVLDA on the arxiv")
 parser.add_argument("outdir", help="The results directory")
-parser.add_argument("-v", "--vocab", default="data/vocab.txt",
-                    help="The vocabulary file")
+parser.add_argument("--data", default="data", help="The data directory")
 parser.add_argument("-k", "--ntopics", default=100, type=int,
                     help="The number of topics")
 parser.add_argument("-b", "--batch", default=1024, type=int,
@@ -34,8 +33,11 @@ if __name__ == "__main__":
     except os.error:
         print("Output directory exists. Overwriting")
 
-    reader = ArxivReader("data/abstracts.db")
-    reader.load_vocab(args.vocab, skip=100, nvocab=8000)
+    stopwords = map(lambda w: w.strip(),
+                    open(os.path.join(args.data, "stopwords.txt")).readlines())
+    reader = ArxivReader(os.path.join(args.data, "abstracts.db"))
+    reader.load_vocab(os.path.join(args.data, "vocab.txt"), skip=100,
+                      nvocab=8000, stopwords=stopwords)
     with open(os.path.join(args.outdir, "vocab.txt"), "w") as f:
         f.write("\n".join(reader.vocab_list))
     pickle.dump(reader, open(os.path.join(args.outdir, "reader.pkl"), "wb"),

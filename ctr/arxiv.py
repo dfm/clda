@@ -10,10 +10,7 @@ import string
 import sqlite3
 import operator
 import numpy as np
-from nltk import corpus
 from collections import defaultdict
-
-stopwords = corpus.stopwords.words("english")
 
 
 class ArxivReader(object):
@@ -67,7 +64,7 @@ class ArxivReader(object):
         return sorted(vocab.iteritems(), key=operator.itemgetter(1),
                       reverse=True)
 
-    def load_vocab(self, fn, skip=0, nvocab=None, strip_stopwords=True,
+    def load_vocab(self, fn, skip=0, nvocab=None, stopwords=None,
                    strip_punc=True, strip_numbers=True, strip_tex=False,
                    min_length=3):
         self.vocab = {}
@@ -77,7 +74,7 @@ class ArxivReader(object):
                 cols = line.split()
                 w = cols[0]
                 if (i < skip or len(w) < min_length
-                        or (strip_stopwords and w in stopwords)
+                        or (stopwords is not None and w in stopwords)
                         or (strip_numbers and
                             not len(w.translate(None, str("0123456789.,~"))))
                         or (strip_punc and
