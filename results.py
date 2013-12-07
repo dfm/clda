@@ -17,7 +17,7 @@ parser.add_argument("lam", help="The path to the results file")
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    reader = ArxivReader("/export/bbq1/dfm/research/data.arxiv.io/data")
+    reader = ArxivReader("data/abstracts.db")
     reader.load_vocab(os.path.join(args.outdir, "vocab.txt"))
 
     lam = np.loadtxt(args.lam)

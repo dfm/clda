@@ -49,12 +49,10 @@ class CF(object):
         self.U = np.random.rand(self.nusers, self.ntopics)
         for i in range(50):
             print("Updating")
-            u0 = np.array(self.U)
             _cf.update(self.U, self.V, self.user_items, self.item_users)
-            print(np.mean(np.abs(self.U - u0)))
-            print(self.recall(pool=pool))
+            print(self.test())
 
-        # Update the users.
+        # # Update the users.
         # print("Updating users")
         # self.VTV = np.dot(self.V.T, self.V)
         # map(self.update_user, range(self.nusers))
@@ -63,7 +61,16 @@ class CF(object):
         # print("Updating items")
         # self.UTU = np.dot(self.U.T, self.U)
         # map(self.update_item, range(self.nitems))
+
+        print(self.test())
         assert 0
+
+    def test(self):
+        err = 0.0
+        for uid, items in enumerate(self.user_items):
+            for iid in items:
+                err += (1-np.dot(self.U[uid], self.V[iid])) ** 2
+        return err
 
     def recall(self, pool=None, M=100):
         mp = map if pool is None else pool.map

@@ -18,7 +18,7 @@ class ArxivReader(object):
         self.dbpath = dbpath
         with sqlite3.connect(dbpath) as connection:
             c = connection.cursor()
-            c.execute("SELECT count(*) FROM abstracts")
+            c.execute("SELECT count(*) FROM articles")
             self.nfiles = int(c.fetchone()[0])
         self.validation_set = []
 
@@ -26,7 +26,7 @@ class ArxivReader(object):
         while True:
             with sqlite3.connect(self.dbpath) as connection:
                 c = connection.cursor()
-                c.execute("SELECT * FROM abstracts WHERE rowid=?",
+                c.execute("SELECT * FROM articles WHERE rowid=?",
                           (np.random.randint(self.nfiles), ))
                 doc = c.fetchone()
             yield doc
@@ -47,14 +47,14 @@ class ArxivReader(object):
 
     def parse_document(self, doc):
         return [self.vocab[w.lower()]
-                for w in doc[2].split()+doc[3].split()
+                for w in doc[3].split()+doc[4].split()
                 if w.lower() in self.vocab]
 
     def generate_vocab(self):
         vocab = defaultdict(int)
         with sqlite3.connect(self.dbpath) as connection:
             c = connection.cursor()
-            for doc in c.execute("SELECT * FROM abstracts"):
+            for doc in c.execute("SELECT * FROM articles"):
                 for w in doc[2].split()+doc[3].split():
                     vocab[w.lower()] += 1
         return sorted(vocab.iteritems(), key=operator.itemgetter(1),
@@ -64,7 +64,9 @@ class ArxivReader(object):
         self.vocab = {}
         self.vocab_list = []
         with open(fn, "r") as f:
-            for i, (w, count) in enumerate(f):
+            for i, line in enumerate(f):
+                cols = line.split()
+                w = cols[0]
                 if i < skip:
                     continue
                 self.vocab_list.append(w.strip())
@@ -83,7 +85,7 @@ class ArxivReader(object):
     def __getitem__(self, arxiv_id):
         with sqlite3.connect(self.dbpath) as connection:
             c = connection.cursor()
-            c.execute("SELECT * FROM abstracts WHERE arxiv_id=?",
+            c.execute("SELECT * FROM articles WHERE arxiv_id=?",
                       (arxiv_id, ))
             doc = c.fetchone()
         if doc is None:

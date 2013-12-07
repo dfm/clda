@@ -118,7 +118,6 @@ class LDA(object):
 
             # Finalize.
             t += 1
-            documents = []
 
             # Estimate an approximate ELBO.
             if approx_bound:
@@ -127,6 +126,8 @@ class LDA(object):
                 yield t*batch, self.lam, elbo / t
             else:
                 yield t*batch, self.lam
+
+            documents = []
 
     def elbo(self, documents, gammas=None, ndocs=None, maxiter=500, tol=1e-6,
              pool=None):
@@ -139,8 +140,6 @@ class LDA(object):
         if gammas is None:
             gammas = M(_function_wrapper(self, "infer", maxiter=maxiter,
                                          tol=tol), documents)
-            # gammas = [self.infer(d, maxiter=maxiter, tol=tol)
-            #           for d in documents]
 
         # Loop over documents and compute the approximate bound.
         elbo = sp.gammaln(self.nvocab*self.eta)
@@ -158,7 +157,7 @@ class LDA(object):
                        - sp.gammaln(np.sum(gammas, axis=1)))
 
         elbo += np.sum(M(_function_wrapper(self, "elbo_one"),
-                       zip(documents, gammas)))
+                         zip(documents, gammas)))
 
         return elbo
 
@@ -203,6 +202,8 @@ class _function_wrapper(object):
 
 
 if __name__ == "__main__":
+    np.random.seed(123)
+
     # Test stats.
     ntopics = 10
     nvocab = 5000
@@ -212,5 +213,6 @@ if __name__ == "__main__":
     corpus, true_theta = model.sample(500)
     print("Done.")
 
-    for elbo in model.em(TestCorpus(corpus)):
-        print(elbo)
+    for elbo in model.em(TestCorpus(corpus), batch=1024, approx_bound=True):
+        print(elbo[2])
+        assert 0
