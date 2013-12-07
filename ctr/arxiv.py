@@ -6,10 +6,14 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = ["ArxivReader"]
 
+import string
 import sqlite3
 import operator
 import numpy as np
+from nltk import corpus
 from collections import defaultdict
+
+stopwords = corpus.stopwords.words("english")
 
 
 class ArxivReader(object):
@@ -29,7 +33,10 @@ class ArxivReader(object):
                 c.execute("SELECT * FROM articles WHERE rowid=?",
                           (np.random.randint(self.nfiles), ))
                 doc = c.fetchone()
-            yield doc
+            if doc is None:
+                continue
+            if "astro-ph" in doc[2]:
+                yield doc
 
     def validation(self, n):
         docs = []
@@ -60,14 +67,22 @@ class ArxivReader(object):
         return sorted(vocab.iteritems(), key=operator.itemgetter(1),
                       reverse=True)
 
-    def load_vocab(self, fn, skip=0, nvocab=None):
+    def load_vocab(self, fn, skip=0, nvocab=None, strip_stopwords=True,
+                   strip_punc=True, strip_numbers=True, strip_tex=False,
+                   min_length=3):
         self.vocab = {}
         self.vocab_list = []
         with open(fn, "r") as f:
             for i, line in enumerate(f):
                 cols = line.split()
                 w = cols[0]
-                if i < skip:
+                if (i < skip or len(w) < min_length
+                        or (strip_stopwords and w in stopwords)
+                        or (strip_numbers and
+                            not len(w.translate(None, str("0123456789.,~"))))
+                        or (strip_punc and
+                            not len(w.translate(None, string.punctuation)))
+                        or (strip_tex and w.startswith("\\"))):
                     continue
                 self.vocab_list.append(w.strip())
                 self.vocab[w.strip()] = len(self.vocab_list) - 1

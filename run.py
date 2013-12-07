@@ -8,6 +8,7 @@ import os
 import time
 import argparse
 import numpy as np
+import cPickle as pickle
 from multiprocessing import Pool
 
 np.random.seed(1000005)
@@ -30,9 +31,11 @@ if __name__ == "__main__":
         print("Output directory exists. Overwriting")
 
     reader = ArxivReader("data/abstracts.db")
-    reader.load_vocab(args.vocab, skip=100, nvocab=20000)
+    reader.load_vocab(args.vocab, skip=100, nvocab=8000)
     with open(os.path.join(args.outdir, "vocab.txt"), "w") as f:
         f.write("\n".join(reader.vocab_list))
+    pickle.dump(reader, open(os.path.join(args.outdir, "reader.pkl"), "wb"),
+                -1)
 
     # Load a validation set.
     validation = reader.validation(1024)
@@ -44,7 +47,7 @@ if __name__ == "__main__":
     p = model.elbo(validation, pool=pool)
 
     # Run EM.
-    fn = os.path.join(args.outdir, "lambda.{0:04d}.txt")
+    fn = os.path.join(args.outdir, "model.{0:04d}.pkl")
     outfn = os.path.join(args.outdir, "output.log")
     open(outfn, "w").close()
     tot = 0.0
@@ -54,7 +57,7 @@ if __name__ == "__main__":
         if i % 10 == 0:
             tot += time.time() - strt
             p = np.exp(-model.elbo(validation, pool=pool, ndocs=ndocs)/nvalid)
-            print(tot, p)
+            print(i, tot, p)
             open(outfn, "a").write("{0} {1}\n".format(tot, p))
-            np.savetxt(fn.format(i), lam)
+            pickle.dump(model, open(fn.format(i), "wb"), -1)
             strt = time.time()

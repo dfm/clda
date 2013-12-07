@@ -4,25 +4,22 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-import os
 import argparse
 import numpy as np
+import cPickle as pickle
 
 from ctr.lda import dirichlet_expectation
-from ctr.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Show OVLDA results")
-parser.add_argument("outdir", help="The results directory")
-parser.add_argument("lam", help="The path to the results file")
+parser.add_argument("reader", help="The results directory")
+parser.add_argument("model", help="The path to the results file")
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    reader = ArxivReader("data/abstracts.db")
-    reader.load_vocab(os.path.join(args.outdir, "vocab.txt"))
-
-    lam = np.loadtxt(args.lam)
-    lnbeta = dirichlet_expectation(lam)
+    reader = pickle.load(open(args.reader))
+    model = pickle.load(open(args.model))
+    lnbeta = dirichlet_expectation(model.lam)
     for i, topics in enumerate(lnbeta):
         inds = np.argsort(topics)
         print("Topic {0:3d}: ".format(i) +
-              " ".join([reader.vocab_list[i] for i in inds[-10:]]))
+              " ".join([reader.vocab_list[i] for i in inds[-15:]]))
