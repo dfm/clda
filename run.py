@@ -24,6 +24,8 @@ parser.add_argument("-k", "--ntopics", default=100, type=int,
                     help="The number of topics")
 parser.add_argument("-b", "--batch", default=1024, type=int,
                     help="The number of documents in a mini-batch")
+parser.add_argument("--tau", default=1024, type=float)
+parser.add_argument("--kappa", default=0.5, type=float)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -44,8 +46,9 @@ if __name__ == "__main__":
     nvalid = sum([len(s) for s in validation])
 
     # Set up the model.
-    pool = Pool()
-    model = LDA(args.ntopics, len(reader.vocab_list), 0.01, 0.01)
+    pool = Pool(8)
+    model = LDA(args.ntopics, len(reader.vocab_list), 0.01, 0.01,
+                tau=args.tau, kappa=args.kappa)
     p = model.elbo(validation, pool=pool)
 
     # Run EM.
@@ -67,5 +70,3 @@ if __name__ == "__main__":
             pickle.dump(model, open(fn.format(i), "wb"), -1)
             strt = time.time()
             nxt += 0.1
-            if tot >= 18000:
-                break
