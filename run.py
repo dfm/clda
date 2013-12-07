@@ -22,6 +22,8 @@ parser.add_argument("-v", "--vocab", default="data/vocab.txt",
                     help="The vocabulary file")
 parser.add_argument("-k", "--ntopics", default=100, type=int,
                     help="The number of topics")
+parser.add_argument("-b", "--batch", default=1024, type=int,
+                    help="The number of documents in a mini-batch")
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -51,13 +53,19 @@ if __name__ == "__main__":
     outfn = os.path.join(args.outdir, "output.log")
     open(outfn, "w").close()
     tot = 0.0
+    nxt = 2.0
     ndocs = 8e5
     strt = time.time()
-    for i, (n, lam) in enumerate(model.em(reader, ndocs=ndocs, pool=pool)):
-        if i % 10 == 0:
+    for i, (n, lam) in enumerate(model.em(reader, ndocs=ndocs, pool=pool,
+                                          batch=args.batch)):
+        if np.log10(tot+time.time()-strt) > nxt:
             tot += time.time() - strt
             p = np.exp(-model.elbo(validation, pool=pool, ndocs=ndocs)/nvalid)
             print(i, tot, p)
-            open(outfn, "a").write("{0} {1}\n".format(tot, p))
+            open(outfn, "a").write("{0} {1} {2}\n".format(i*args.batch, tot,
+                                                          p))
             pickle.dump(model, open(fn.format(i), "wb"), -1)
             strt = time.time()
+            nxt += 0.1
+            if tot >= 18000:
+                break

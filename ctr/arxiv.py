@@ -35,8 +35,8 @@ class ArxivReader(object):
                 doc = c.fetchone()
             if doc is None:
                 continue
-            if "astro-ph" in doc[2]:
-                yield doc
+            # if "astro-ph" in doc[2]:
+            yield doc
 
     def validation(self, n):
         docs = []
