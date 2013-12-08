@@ -6,6 +6,7 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = ["ArxivReader"]
 
+import string
 import sqlite3
 import operator
 import numpy as np
@@ -18,7 +19,7 @@ class ArxivReader(object):
         self.dbpath = dbpath
         with sqlite3.connect(dbpath) as connection:
             c = connection.cursor()
-            c.execute("SELECT count(*) FROM abstracts")
+            c.execute("SELECT count(*) FROM articles")
             self.nfiles = int(c.fetchone()[0])
         self.validation_set = []
 
@@ -26,9 +27,12 @@ class ArxivReader(object):
         while True:
             with sqlite3.connect(self.dbpath) as connection:
                 c = connection.cursor()
-                c.execute("SELECT * FROM abstracts WHERE rowid=?",
+                c.execute("SELECT * FROM articles WHERE rowid=?",
                           (np.random.randint(self.nfiles), ))
                 doc = c.fetchone()
+            if doc is None:
+                continue
+            # if "astro-ph" in doc[2]:
             yield doc
 
     def validation(self, n):
@@ -47,25 +51,35 @@ class ArxivReader(object):
 
     def parse_document(self, doc):
         return [self.vocab[w.lower()]
-                for w in doc[2].split()+doc[3].split()
+                for w in doc[3].split()+doc[4].split()
                 if w.lower() in self.vocab]
 
     def generate_vocab(self):
         vocab = defaultdict(int)
         with sqlite3.connect(self.dbpath) as connection:
             c = connection.cursor()
-            for doc in c.execute("SELECT * FROM abstracts"):
+            for doc in c.execute("SELECT * FROM articles"):
                 for w in doc[2].split()+doc[3].split():
                     vocab[w.lower()] += 1
         return sorted(vocab.iteritems(), key=operator.itemgetter(1),
                       reverse=True)
 
-    def load_vocab(self, fn, skip=0, nvocab=None):
+    def load_vocab(self, fn, skip=0, nvocab=None, stopwords=None,
+                   strip_punc=True, strip_numbers=True, strip_tex=False,
+                   min_length=3):
         self.vocab = {}
         self.vocab_list = []
         with open(fn, "r") as f:
-            for i, (w, count) in enumerate(f):
-                if i < skip:
+            for i, line in enumerate(f):
+                cols = line.split()
+                w = cols[0]
+                if (i < skip or len(w) < min_length
+                        or (stopwords is not None and w in stopwords)
+                        or (strip_numbers and
+                            not len(w.translate(None, str("0123456789.,~"))))
+                        or (strip_punc and
+                            not len(w.translate(None, string.punctuation)))
+                        or (strip_tex and w.startswith("\\"))):
                     continue
                 self.vocab_list.append(w.strip())
                 self.vocab[w.strip()] = len(self.vocab_list) - 1
@@ -83,7 +97,7 @@ class ArxivReader(object):
     def __getitem__(self, arxiv_id):
         with sqlite3.connect(self.dbpath) as connection:
             c = connection.cursor()
-            c.execute("SELECT * FROM abstracts WHERE arxiv_id=?",
+            c.execute("SELECT * FROM articles WHERE arxiv_id=?",
                       (arxiv_id, ))
             doc = c.fetchone()
         if doc is None:

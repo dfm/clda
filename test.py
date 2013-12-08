@@ -5,7 +5,7 @@ if __name__ == "__main__":
     from multiprocessing import Pool
     with sqlite3.connect("data/abstracts.db") as connection:
         c = connection.cursor()
-        c.execute("SELECT user_id,arxiv_id FROM activity LIMIT 50000")
+        c.execute("SELECT user_id,arxiv_id FROM activity LIMIT 10000")
         activity = c.fetchall()
         c.execute("""SELECT user_id,count(user_id) FROM activity
                      GROUP BY user_id""")
@@ -15,6 +15,6 @@ if __name__ == "__main__":
     activity = [(u, a) for u, a in activity if u in users]
     print(len(activity))
 
-    model = CF(100)
+    model = CF(200)
     pool = Pool()
     model.learn(activity, pool=pool)
