@@ -5,6 +5,7 @@ from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
 import os
+import sys
 import time
 import argparse
 import numpy as np
@@ -12,6 +13,14 @@ import cPickle as pickle
 from multiprocessing import Pool
 
 np.random.seed(1000005)
+
+try:
+    import ctr
+    ctr = ctr
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ctr
+    ctr = ctr
 
 from ctr.lda import LDA
 from ctr.arxiv import ArxivReader
@@ -48,14 +57,14 @@ if __name__ == "__main__":
     nvalid = sum([len(s) for s in validation])
 
     # Set up the model.
-    pool = Pool(8)
+    pool = Pool(12)
     model = LDA(args.ntopics, len(reader.vocab_list), 0.01, 0.01,
                 tau=args.tau, kappa=args.kappa)
     p = model.elbo(validation, pool=pool)
 
     # Run EM.
     fn = os.path.join(args.outdir, "model.{0:04d}.pkl")
-    outfn = os.path.join(args.outdir, "output.log")
+    outfn = os.path.join(args.outdir, "convergence.txt")
     open(outfn, "w").close()
     tot = 0.0
     nxt = 2.0
