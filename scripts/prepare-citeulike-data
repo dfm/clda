@@ -1,0 +1,159 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
+import re
+from collections import defaultdict
+
+
+p = re.compile(r"([0-9]{4}\.[0-9]{4})"
+               r"|([a-zA-Z\-\.]+?/[0-9]+)"
+               r"|([a-zA-Z\-\.]+?\?[0-9]+)"
+               r"|([a-zA-Z\-\.]+?/\?[0-9]+)"
+               r"|([a-zA-Z\-\.]+?\?=[0-9]+)"
+               r"|([a-zA-Z\-\.]+?%2F[0-9]+)"
+               r"|([a-zA-Z\-\.]+?%2f[0-9]+)"
+               r"|([a-zA-Z\-\.]+?\$/\$[0-9]+)"
+               r"|([a-zA-Z\-\.]+?\.[0-9]+)"
+               r"|([a-zA-Z\-\.]+?\?papernum=[0-9]+)")
+p_pref = re.compile(r"([0-9]{4}\.[0-9]{4})")
+
+
+def get_id(r):
+    """
+    Try to parse the ArXiv ID from a linkout and return ``None`` on failure.
+
+    """
+    for i, el in enumerate(r):
+        if len(el):
+            if i == 0 or i == 1:
+                return el
+            elif i == 2:
+                return "/".join(el.split("?"))
+            elif i == 3:
+                return "/".join(el.split("/?"))
+            elif i == 4:
+                return "/".join(el.split("?="))
+            elif i == 5:
+                return "/".join(el.split("%2F"))
+            elif i == 6:
+                return "/".join(el.split("%2f"))
+            elif i == 7:
+                return "/".join(el.split("$/$"))
+            elif i == 8:
+                return "/".join(["".join(el.split(".")[:-1]),
+                                 el.split(".")[-1]])
+            else:
+                return "/".join(el.split("?papernum="))
+    return None
+
+
+def parse_linkouts(fn):
+    """
+    Parse a linkout file to get the ArXiv IDs associated with the URLs.
+
+    """
+    final = dict()
+    for line in open(fn):
+        # Unicode. BOOM.
+        line = line.decode("utf-8")
+
+        # Do initial heuristic cut.
+        ll = line.lower()
+        if ("arxiv" not in ll and "adsabs" not in ll and
+                "xxx.lanl.gov" not in ll and "eprintweb.org" not in ll):
+            continue
+
+        # Try to parse some sort of ArXiv ID from the linkout.
+        results = p.findall(line)
+        ids = filter(lambda i: i is not None, map(get_id, results))
+        if len(ids) == 0:
+            continue
+
+        # Remove strange syntax.
+        ids = [i if "/" not in i else
+               i.split("/")[0].split(".")[0]+"/"+i.split("/")[1]
+               for i in ids]
+
+        # Choose the preferred form of the ID.
+        article_id = line.split("|")[0]
+        if all([i == ids[0] for i in ids[1:]]):
+            final[article_id] = ids[0]
+        else:
+            for i in ids:
+                if len(p_pref.findall(i)):
+                    final[article_id] = i
+                    break
+
+    return final
+
+
+def parse_users(fn, linkouts):
+    """
+    Parse a CiteULike list of events into a dictionary. Only include listings
+    that have linkouts in the provided linkout dictionary.
+
+    """
+    users = defaultdict(set)
+    for line in open(fn):
+        cols = line.split("|")
+        linkout, user = cols[0], cols[1]
+        try:
+            users[user].add(linkouts[linkout])
+        except KeyError:
+            continue
+    return users
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+    import time
+    import sqlite3
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Prepare the CiteULike dataset")
+    parser.add_argument("data", help="The directory with the raw data files")
+    parser.add_argument("db", help="The path to the database file")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.db):
+        print("The database file '{0}' doesn't exist".format(args.db))
+        sys.exit(-1)
+
+    print("Parsing linkout listings...")
+    strt = time.time()
+    linkouts = parse_linkouts(os.path.join(args.data, "linkouts"))
+    print("Done. Took {0:.2f} seconds".format(time.time() - strt))
+
+    print("Parsing users...")
+    strt = time.time()
+    users = parse_users(os.path.join(args.data, "current"), linkouts)
+    print("Done. Took {0:.2f} seconds".format(time.time() - strt))
+
+    print("Updating database...")
+    strt = time.time()
+    with sqlite3.connect(args.db) as connection:
+        c = connection.cursor()
+
+        # Require foreign keys for references.
+        c.execute("PRAGMA foreign_keys = ON")
+
+        # Create/overwrite the table.
+        c.execute("DROP TABLE IF EXISTS citeulike")
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS citeulike(
+            user_id  TEXT,
+            arxiv_id INTEGER REFERENCES articles
+        )""")
+
+        # Loop over the listings and add them to the database.
+        for u, arxiv_ids in users.iteritems():
+            c.executemany("""INSERT INTO citeulike(user_id, arxiv_id)
+                             VALUES (?,(SELECT id FROM articles
+                                        WHERE arxiv_id=?))""",
+                          [(u, i) for i in arxiv_ids])
+            connection.commit()
+    print("Done. Took {0:.2f} seconds".format(time.time() - strt))
