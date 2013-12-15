@@ -14,7 +14,7 @@ provided at [data.arxiv.io](http://data.arxiv.io/abstracts.db.gz) and unzip
 it. Then run the parsing script
 
 ```
-scripts/prepare-citeulike-data /path/to/citulike/data /path/to/abstracts.db
+scripts/prepare-citeulike-data /path/to/citulike/data/ /path/to/abstracts.db
 ```
 
 to create a new table (called `citeulike`) in SQLite database giving the
