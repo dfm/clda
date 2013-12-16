@@ -15,22 +15,23 @@ from multiprocessing import Pool
 np.random.seed(1000005)
 
 try:
-    import ctr
-    ctr = ctr
+    import clda
+    clda = clda
 except ImportError:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import ctr
-    ctr = ctr
+    sys.path.insert(0, os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    import clda
+    clda = clda
 
-from ctr.lda import LDA
-from ctr.arxiv import ArxivReader
+from clda.lda import LDA
+from clda.arxiv import ArxivReader
 
 parser = argparse.ArgumentParser(description="Run OVLDA on the arxiv")
 parser.add_argument("outdir", help="The results directory")
 parser.add_argument("--data", default="data", help="The data directory")
-parser.add_argument("-k", "--ntopics", default=100, type=int,
+parser.add_argument("-k", "--ntopics", default=200, type=int,
                     help="The number of topics")
-parser.add_argument("-b", "--batch", default=1024, type=int,
+parser.add_argument("-b", "--batch", default=4096, type=int,
                     help="The number of documents in a mini-batch")
 parser.add_argument("--tau", default=1024, type=float)
 parser.add_argument("--kappa", default=0.5, type=float)
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     nvalid = sum([len(s) for s in validation])
 
     # Set up the model.
-    pool = Pool(12)
+    pool = Pool()
     model = LDA(args.ntopics, len(reader.vocab_list), 0.01, 0.01,
                 tau=args.tau, kappa=args.kappa)
     p = model.elbo(validation, pool=pool)

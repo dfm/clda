@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
+
+import os
+import sys
+import argparse
+import numpy as np
+import cPickle as pickle
+
+try:
+    import clda
+    clda = clda
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    import clda
+    clda = clda
+
+from clda.lda import dirichlet_expectation
+
+parser = argparse.ArgumentParser(
+    description="Infer the topic distribution for a document")
+parser.add_argument("model", help="The path to the model pickle")
+parser.add_argument("arxiv_id", help="The arXiv ID of the document")
+parser.add_argument("-n", "--nwords", type=int, default=15,
+                    help="The number of words to show")
+parser.add_argument("--thresh", type=float, default=0.0,
+                    help="The minimum topic fraction to display")
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    reader = pickle.load(
+        open(os.path.join(os.path.dirname(os.path.abspath(args.model)),
+                          "reader.pkl")))
+    model = pickle.load(open(args.model))
+
+    doc = reader[args.arxiv_id]
+    print("[{0}]: {1}".format(doc[1], doc[3]))
+    topic_dist = model.infer(reader.parse_document(doc))
+    prob = np.exp(dirichlet_expectation(topic_dist))
+    inds = np.argsort(topic_dist)[::-1]
+
+    for p, words in zip(prob[inds], model.lam[inds]):
+        if p < args.thresh:
+            break
+        m = np.argsort(words)
+        print("{0:5.2f} % : ".format(p*100),
+              " ".join([reader.vocab_list[i] for i in m[-args.nwords:]]))
