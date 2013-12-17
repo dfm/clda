@@ -40,7 +40,7 @@ class ICF(object):
             test_args = [(u, t, user_items[u])
                          for u, t in test_user_items.items()]
 
-        for i in range(1):
+        while True:
             print("Updating users")
             vtv = np.dot(self.V.T, self.V)
             self.U = np.vstack(M(_function_wrapper(self,

@@ -6,6 +6,7 @@ from __future__ import (division, print_function, absolute_import,
 
 import os
 import sys
+import time
 import sqlite3
 import argparse
 import numpy as np
@@ -35,11 +36,11 @@ parser.add_argument("--mn-doc", default=5, type=int,
                     help="The number of documents required for a user")
 parser.add_argument("-f", "--folds", default=5, type=int,
                     help="The number of cross-validation folds")
-parser.add_argument("--alpha", default=5.0, type=float,
+parser.add_argument("--alpha", default=100.0, type=float,
                     help="The confidence scaling factor")
-parser.add_argument("--l2u", default=0.01, type=float,
+parser.add_argument("--l2u", default=2.0, type=float,
                     help="The L2 strength for the user vectors")
-parser.add_argument("--l2v", default=0.01, type=float,
+parser.add_argument("--l2v", default=2.0, type=float,
                     help="The L2 strength for the document vectors")
 
 if __name__ == "__main__":
@@ -71,6 +72,10 @@ if __name__ == "__main__":
     user_map = dict(zip(user_counts.keys(), range(len(user_counts))))
     doc_map = dict(zip(doc_counts.keys(), range(len(doc_counts))))
     data = [(user_map[u], doc_map[d], d) for u, d in data]
+
+    # Save the user and document maps to the results directory.
+    pickle.dump((user_map, doc_map),
+                open(os.path.join(args.outdir, "maps.pkl"), "wb"), -1)
 
     # Print the dataset stats.
     print("{0} unique users".format(len(user_counts)))
@@ -104,13 +109,28 @@ if __name__ == "__main__":
     # Build the ICF model.
     model = ICF(args.ntopics, len(user_counts), len(doc_counts),
                 alpha=args.alpha, l2v=args.l2v, l2u=args.l2u)
+    pool = Pool()
+
+    # Estimate the random recall rate.
+    print("Random recall")
+    print(model.mean_recall([], cv_folds[0], pool=pool))
+
+    # Concatenate the training set and some of the held-out sets.
+    t = training_set
+    for s in cv_folds[:-1]:
+        t += s
+
+    # Initialize the results file.
+    fn = os.path.join(args.outdir, "cf-convergence.txt")
+    open(fn, "w").close()
 
     # Train the model.
-    pool = Pool()
-    t = training_set
-    for s in cv_folds[:-2]:
-        t += s
-    for recall in model.train(t, test_set=cv_folds[-2], pool=pool):
-        print(recall)
-    print("Final test recall")
-    print(model.mean_recall(t+cv_folds[-2], cv_folds[-1], pool=pool))
+    strt = time.time()
+    for i, recall in enumerate(model.train(t, test_set=cv_folds[-1],
+                                           pool=pool)):
+        print("Iteration {0}: held-out recall = {1}".format(i, recall))
+        with open(fn, "a") as f:
+            f.write("{0:d} {1:e} {2:e}\n".format(i, time.time()-strt, recall))
+        pickle.dump(model,
+                    open(os.path.join(args.outdir,
+                         "cf-model.{0:04d}.pkl".format(i)), "wb"), -1)
