@@ -40,7 +40,7 @@ class ICF(object):
             test_args = [(u, t, user_items[u])
                          for u, t in test_user_items.items()]
 
-        for i in range(10):
+        for i in range(1):
             print("Updating users")
             vtv = np.dot(self.V.T, self.V)
             self.U = np.vstack(M(_function_wrapper(self,
@@ -75,18 +75,6 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(um, axis=0)
         return np.linalg.solve(utcu, b)
 
-    # def compute_recall(self, args, N=200):
-    #     u, items, previous = args
-    #     items += previous
-
-    #     # Compute the top recommendations.
-    #     r = np.dot(self.V, self.U[u])
-    #     inds = np.argsort(r)[::-1]
-
-    #     # Compute the recall.
-    #     recall = np.sum([i in items for i in inds[:N]]) / len(items)
-    #     return recall
-
     def compute_recall(self, args, N=200):
         u, items, previous = args
 
@@ -101,3 +89,17 @@ class ICF(object):
         # Compute the recall.
         recall = np.sum([i in items for i in inds[:N]]) / len(items)
         return recall
+
+    def mean_recall(self, training_set, test_set, N=200, pool=None):
+        M = map if pool is None else pool.map
+
+        # Parse the datasets.
+        user_items = [[] for i in range(self.nusers)]
+        [user_items[u].append(a) for u, a in training_set]
+        test_user_items = defaultdict(list)
+        [test_user_items[u].append(a) for u, a in test_set]
+        test_args = [(u, t, user_items[u])
+                     for u, t in test_user_items.items()]
+
+        return np.mean(M(_function_wrapper(self, "compute_recall", N=N),
+                         test_args))
