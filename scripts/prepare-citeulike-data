@@ -62,7 +62,7 @@ def parse_linkouts(fn):
         # Do initial heuristic cut.
         ll = line.lower()
         if ("arxiv" not in ll and "adsabs" not in ll and
-                "xxx.lanl.gov" not in ll and "eprintweb.org" not in ll):
+                "lanl.gov" not in ll and "eprintweb.org" not in ll):
             continue
 
         # Try to parse some sort of ArXiv ID from the linkout.
@@ -99,10 +99,8 @@ def parse_users(fn, linkouts):
     for line in open(fn):
         cols = line.split("|")
         linkout, user = cols[0], cols[1]
-        try:
+        if linkout in linkouts:
             users[user].add(linkouts[linkout])
-        except KeyError:
-            continue
     return users
 
 

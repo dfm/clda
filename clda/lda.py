@@ -10,6 +10,8 @@ import numpy as np
 import scipy.special as sp
 from scipy.misc import logsumexp
 
+from .utils import _function_wrapper
+
 
 def dirichlet_expectation(g):
     if len(g.shape) == 1:
@@ -187,32 +189,3 @@ class TestCorpus(object):
 
     def next(self):
         return self.documents[np.random.randint(self.ndocs)]
-
-
-class _function_wrapper(object):
-
-    def __init__(self, target, attr, *args, **kwargs):
-        self.target = target
-        self.attr = attr
-        self.args = args
-        self.kwargs = kwargs
-
-    def __call__(self, v):
-        return getattr(self.target, self.attr)(v, *self.args, **self.kwargs)
-
-
-if __name__ == "__main__":
-    np.random.seed(123)
-
-    # Test stats.
-    ntopics = 10
-    nvocab = 5000
-
-    model = LDA(ntopics, nvocab, 0.01, 0.01)
-    print("Generating corpus...")
-    corpus, true_theta = model.sample(500)
-    print("Done.")
-
-    for elbo in model.em(TestCorpus(corpus), batch=1024, approx_bound=True):
-        print(elbo[2])
-        assert 0
