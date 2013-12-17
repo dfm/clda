@@ -1,0 +1,115 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
+
+import os
+import sys
+import sqlite3
+import argparse
+import numpy as np
+import cPickle as pickle
+from multiprocessing import Pool
+from collections import defaultdict
+
+np.random.seed(1000005)
+
+try:
+    import clda
+    clda = clda
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    import clda
+    clda = clda
+
+from clda.icf import ICF
+
+parser = argparse.ArgumentParser(description="Run ICF on CitULike data")
+parser.add_argument("outdir", help="The results directory")
+parser.add_argument("--data", default="data", help="The data directory")
+parser.add_argument("-k", "--ntopics", default=200, type=int,
+                    help="The number of topics")
+parser.add_argument("--mn-doc", default=5, type=int,
+                    help="The number of documents required for a user")
+parser.add_argument("-f", "--folds", default=5, type=int,
+                    help="The number of cross-validation folds")
+parser.add_argument("--alpha", default=5.0, type=float,
+                    help="The confidence scaling factor")
+parser.add_argument("--l2u", default=0.01, type=float,
+                    help="The L2 strength for the user vectors")
+parser.add_argument("--l2v", default=0.01, type=float,
+                    help="The L2 strength for the document vectors")
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    try:
+        os.makedirs(args.outdir)
+    except os.error:
+        print("Output directory exists.")
+
+    # Load the dataset.
+    with sqlite3.connect(os.path.join(args.data, "abstracts.db")) as conn:
+        c = conn.cursor()
+        c.execute("SELECT * FROM citeulike")
+        data = c.fetchall()
+        c.execute("SELECT user_id, count(*) FROM citeulike GROUP BY user_id")
+        user_counts = c.fetchall()
+
+    # Filter to only include users with at least the minimum number of docs.
+    user_counts = dict(filter(lambda u: u[1] > args.mn_doc, user_counts))
+    data = filter(lambda u: u[0] in user_counts, data)
+    np.random.shuffle(data)
+
+    # Calculate the document counts.
+    doc_counts = defaultdict(int)
+    for u, d in data:
+        doc_counts[d] += 1
+
+    # Map the users and documents to integers.
+    user_map = dict(zip(user_counts.keys(), range(len(user_counts))))
+    doc_map = dict(zip(doc_counts.keys(), range(len(doc_counts))))
+    data = [(user_map[u], doc_map[d], d) for u, d in data]
+
+    # Print the dataset stats.
+    print("{0} unique users".format(len(user_counts)))
+    print("{0} unique documents".format(len(doc_counts)))
+    print("{0} user-document pairs".format(len(data)))
+
+    # Build the CV folds.
+    training_set = []
+    cv_folds = [[] for i in range(args.folds)]
+    cv_counts = defaultdict(int)
+    for u, d, name in data:
+        if doc_counts[name] < args.folds:
+            # Ensure that all the documents are in the training set once.
+            training_set.append((u, d))
+        else:
+            if cv_counts[d] < args.folds:
+                # Split the first instances of the document into the CV folds.
+                ind = cv_counts[d]
+            else:
+                # Randomly assign the following occurrences to the folds and
+                # training set.
+                ind = np.random.randint(args.folds)
+            cv_folds[ind].append((u, d))
+        cv_counts[d] += 1
+
+    # Print the train and test set stats.
+    print("{0} entries in the training set".format(len(training_set)))
+    print("{0} folds with {1} entries".format(len(cv_folds),
+                                              [len(f) for f in cv_folds]))
+
+    # Build the ICF model.
+    model = ICF(args.ntopics, len(user_counts), len(doc_counts),
+                alpha=args.alpha, l2v=args.l2v, l2u=args.l2u)
+
+    # Train the model.
+    pool = Pool()
+    t = training_set
+    for s in cv_folds[:-2]:
+        t += s
+    for recall in model.train(t, test_set=cv_folds[-2], pool=pool):
+        print(recall)
+    print("Final test recall")

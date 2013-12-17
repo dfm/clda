@@ -75,29 +75,29 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(um, axis=0)
         return np.linalg.solve(utcu, b)
 
-    def compute_recall(self, args, N=200):
-        u, items, previous = args
-        items += previous
-
-        # Compute the top recommendations.
-        r = np.dot(self.V, self.U[u])
-        inds = np.argsort(r)[::-1]
-
-        # Compute the recall.
-        recall = np.sum([i in items for i in inds[:N]]) / len(items)
-        return recall
-
     # def compute_recall(self, args, N=200):
     #     u, items, previous = args
-
-    #     # Remove items in training data.
-    #     m = np.ones(self.nitems, dtype=bool)
-    #     m[previous] = False
+    #     items += previous
 
     #     # Compute the top recommendations.
-    #     r = np.dot(self.V[m], self.U[u])
-    #     inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
+    #     r = np.dot(self.V, self.U[u])
+    #     inds = np.argsort(r)[::-1]
 
     #     # Compute the recall.
     #     recall = np.sum([i in items for i in inds[:N]]) / len(items)
     #     return recall
+
+    def compute_recall(self, args, N=200):
+        u, items, previous = args
+
+        # Remove items in training data.
+        m = np.ones(self.nitems, dtype=bool)
+        m[previous] = False
+
+        # Compute the top recommendations.
+        r = np.dot(self.V[m], self.U[u])
+        inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
+
+        # Compute the recall.
+        recall = np.sum([i in items for i in inds[:N]]) / len(items)
+        return recall
