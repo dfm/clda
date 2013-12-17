@@ -8,12 +8,13 @@ rc("font", family="serif", size=12)
 rc("text", usetex=True)
 import daft
 
-pgm = daft.PGM([6, 3.5], origin=[0.5, -1.75])
+pgm = daft.PGM([5.6, 2.4], origin=[0.75, -0.7])
 
 pgm.add_plate(daft.Plate([1.4, -0.6, 3.1, 2.2], r"$D$"))
 pgm.add_plate(daft.Plate([2.5, 0.5, 1.95, 1], r"$N_d$"))
 pgm.add_plate(daft.Plate([4.6, 0.5, 1, 1], r"$K$", position="bottom right"))
-pgm.add_plate(daft.Plate([3.5, -0.5, 2.1, 0.95], r"$U$", position="bottom right"))
+pgm.add_plate(daft.Plate([3.5, -0.5, 2.1, 0.95], r"$U$",
+                         position="bottom right"))
 
 pgm.add_node(daft.Node("alpha", r"$\alpha$", 1, 1, fixed=True))
 pgm.add_node(daft.Node("theta", r"$\theta_d$", 2, 1))
@@ -43,4 +44,4 @@ pgm.add_edge("u", "r")
 pgm.add_edge("v", "r")
 
 pgm.render()
-pgm.figure.savefig("ctm.pdf")
+pgm.figure.savefig("clda.pdf")
