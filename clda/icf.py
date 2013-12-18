@@ -15,7 +15,8 @@ from .utils import _function_wrapper
 
 class ICF(object):
 
-    def __init__(self, K, nusers, nitems, alpha=10.0, l2v=0.1, l2u=0.1):
+    def __init__(self, K, nusers, nitems, alpha=10.0, l2v=0.1, l2u=0.1,
+                 theta=None):
         self.K = K
         self.nusers = nusers
         self.nitems = nitems
@@ -24,7 +25,12 @@ class ICF(object):
         self.l2u = l2u
 
         self.U = np.random.rand(nusers, K)
-        self.V = np.random.rand(nitems, K)
+        if theta is None:
+            self.theta = np.zeros((nitems, K))
+            self.V = np.random.rand(nitems, K)
+        else:
+            self.theta = theta
+            self.V = np.array(theta)
 
     def train(self, training_set, test_set=None, pool=None, N=200):
         M = map if pool is None else pool.map
@@ -51,7 +57,8 @@ class ICF(object):
             utu = np.dot(self.U.T, self.U)
             self.V = np.vstack(M(_function_wrapper(self,
                                                    "compute_item_update",
-                                                   utu), item_users))
+                                                   utu),
+                                 zip(item_users, self.theta)))
 
             # Compute the held out recall.
             if test_set is not None:
@@ -68,11 +75,12 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(vm, axis=0)
         return np.linalg.solve(vtcv, b)
 
-    def compute_item_update(self, vec, utu):
+    def compute_item_update(self, args, utu):
+        vec, theta = args
         um = self.U[vec]
         utcu = utu + self.alpha * np.dot(um.T, um)
         utcu[np.diag_indices(self.K)] += self.l2v
-        b = (1+self.alpha)*np.sum(um, axis=0)
+        b = (1+self.alpha)*np.sum(um, axis=0) + self.l2v*theta
         return np.linalg.solve(utcu, b)
 
     def compute_recall(self, args, N=200):

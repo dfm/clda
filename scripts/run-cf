@@ -26,6 +26,8 @@ except ImportError:
     clda = clda
 
 from clda.icf import ICF
+from clda.lda import dirichlet_expectation
+from clda.utils import _function_wrapper
 
 parser = argparse.ArgumentParser(description="Run ICF on CitULike data")
 parser.add_argument("outdir", help="The results directory")
@@ -42,8 +44,11 @@ parser.add_argument("--l2u", default=2.0, type=float,
                     help="The L2 strength for the user vectors")
 parser.add_argument("--l2v", default=2.0, type=float,
                     help="The L2 strength for the document vectors")
+parser.add_argument("--lda",
+                    help="Path to a pre-trained LDA model")
 
 if __name__ == "__main__":
+    pool = Pool()
     args = parser.parse_args()
     try:
         os.makedirs(args.outdir)
@@ -53,10 +58,17 @@ if __name__ == "__main__":
     # Load the dataset.
     with sqlite3.connect(os.path.join(args.data, "abstracts.db")) as conn:
         c = conn.cursor()
-        c.execute("SELECT * FROM citeulike")
+        c.execute("""SELECT user_id, arxiv_id,
+                        (SELECT arxiv_id FROM articles
+                         WHERE id=citeulike.arxiv_id)
+                     FROM citeulike""")
         data = c.fetchall()
         c.execute("SELECT user_id, count(*) FROM citeulike GROUP BY user_id")
         user_counts = c.fetchall()
+
+    # Remove any articles that don't have an arxiv id. How the eff did that
+    # happen?
+    data = filter(lambda d: d[2] is not None, data)
 
     # Filter to only include users with at least the minimum number of docs.
     user_counts = dict(filter(lambda u: u[1] > args.mn_doc, user_counts))
@@ -65,13 +77,20 @@ if __name__ == "__main__":
 
     # Calculate the document counts.
     doc_counts = defaultdict(int)
-    for u, d in data:
+    for u, d, aid in data:
         doc_counts[d] += 1
 
     # Map the users and documents to integers.
     user_map = dict(zip(user_counts.keys(), range(len(user_counts))))
     doc_map = dict(zip(doc_counts.keys(), range(len(doc_counts))))
-    data = [(user_map[u], doc_map[d], d) for u, d in data]
+
+    # Extract the arxiv ids.
+    arxiv_ids = [None for i in range(len(doc_map))]
+    for u, d, aid in data:
+        arxiv_ids[doc_map[d]] = aid
+
+    # Convert the data to integers.
+    data = [(user_map[u], doc_map[d], d) for u, d, aid in data]
 
     # Save the user and document maps to the results directory.
     pickle.dump((user_map, doc_map),
@@ -81,6 +100,22 @@ if __name__ == "__main__":
     print("{0} unique users".format(len(user_counts)))
     print("{0} unique documents".format(len(doc_counts)))
     print("{0} user-document pairs".format(len(data)))
+
+    # Load the LDA model and run inference on the documents.
+    ntopics = args.ntopics
+    if args.lda is not None:
+        print("Running LDA inference")
+        lda = pickle.load(open(args.lda))
+        reader = pickle.load(open(os.path.join(os.path.dirname(
+            os.path.abspath(args.lda)), "reader.pkl")))
+
+        documents = map(lambda i: reader.parse_document(reader[i]), arxiv_ids)
+
+        ntopics = lda.ntopics
+        theta = np.empty((len(doc_counts), ntopics))
+        gammas = pool.map(_function_wrapper(lda, "infer"), documents)
+        gammas = np.array(gammas)
+        thetas = np.exp(dirichlet_expectation(gammas))
 
     # Build the CV folds.
     training_set = []
@@ -107,9 +142,13 @@ if __name__ == "__main__":
                                               [len(f) for f in cv_folds]))
 
     # Build the ICF model.
-    model = ICF(args.ntopics, len(user_counts), len(doc_counts),
-                alpha=args.alpha, l2v=args.l2v, l2u=args.l2u)
-    pool = Pool()
+    if args.lda is None:
+        model = ICF(ntopics, len(user_counts), len(doc_counts),
+                    alpha=args.alpha, l2v=args.l2v, l2u=args.l2u)
+    else:
+        model = ICF(ntopics, len(user_counts), len(doc_counts),
+                    alpha=args.alpha, l2v=args.l2v, l2u=args.l2u,
+                    theta=thetas)
 
     # Estimate the random recall rate.
     print("Random recall")
