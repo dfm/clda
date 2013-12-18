@@ -79,6 +79,19 @@ c_{ij} &=& 1+\alpha\,r_{ij}
 \end{eqnarray}
 where $\alpha$ is a free parameter.
 
+\section{Latent Dirichlet allocation}
+
+\section{Collaborative LDA}
+
+In this model, the maximum likelihood updates are \cite{ctr}
+\begin{eqnarray}
+\mathbf{u}_i &\gets& (V\,C_i\,V^\mathrm{T}+\lambda_u)^{-1}\,
+                     V\,C_i\,\mathbf{r}_i
+\quad \mathrm{and} \\
+\mathbf{v}_j &\gets& (U\,C_j\,U^\mathrm{T} + \lambda_v)^{-1}\,(U\,C_j\,
+                     \mathbf{r}_j + \lambda_v\,\theta_j) \nonumber
+\end{eqnarray}
+
 \newpage
 \begin{multicols}{2}
 \begin{figure*}
