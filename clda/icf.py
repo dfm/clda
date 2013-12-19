@@ -32,7 +32,8 @@ class ICF(object):
             self.theta = theta
             self.V = np.array(theta)
 
-    def train(self, training_set, test_set=None, pool=None, N=200):
+    def train(self, training_set, test_set=None, pool=None, lda=False,
+              N=range(50, 501, 50)):
         M = map if pool is None else pool.map
 
         user_items = [[] for i in range(self.nusers)]
@@ -46,12 +47,22 @@ class ICF(object):
             test_args = [(u, t, user_items[u])
                          for u, t in test_user_items.items()]
 
+        count = 0
         while True:
             print("Updating users")
             vtv = np.dot(self.V.T, self.V)
             self.U = np.vstack(M(_function_wrapper(self,
                                                    "compute_user_update",
                                                    vtv), user_items))
+
+            if lda and count == 0:
+                print("Computing LDA recall")
+                self.lda_recall = np.mean(M(_function_wrapper(self,
+                                                              "compute_recall",
+                                                              N=N),
+                                            test_args), axis=0)
+                print("LDA recall: {0}".format(self.lda_recall))
+            count += 1
 
             print("Updating items")
             utu = np.dot(self.U.T, self.U)
@@ -64,7 +75,7 @@ class ICF(object):
             if test_set is not None:
                 print("Computing held out recall")
                 yield np.mean(M(_function_wrapper(self, "compute_recall", N=N),
-                                test_args))
+                                test_args), axis=0)
             else:
                 yield 0.0
 
@@ -83,7 +94,7 @@ class ICF(object):
         b = (1+self.alpha)*np.sum(um, axis=0) + self.l2v*theta
         return np.linalg.solve(utcu, b)
 
-    def compute_recall(self, args, N=200):
+    def compute_recall(self, args, N=range(50, 501, 50)):
         u, items, previous = args
 
         # Remove items in training data.
@@ -95,10 +106,11 @@ class ICF(object):
         inds = np.arange(self.nitems)[m][np.argsort(r)[::-1]]
 
         # Compute the recall.
-        recall = np.sum([i in items for i in inds[:N]]) / len(items)
-        return recall
+        recall = np.cumsum([i in items for i in inds]) / len(items)
+        return recall[N]
 
-    def mean_recall(self, training_set, test_set, N=200, pool=None):
+    def mean_recall(self, training_set, test_set, N=range(50, 501, 50),
+                    pool=None):
         M = map if pool is None else pool.map
 
         # Parse the datasets.
@@ -110,4 +122,4 @@ class ICF(object):
                      for u, t in test_user_items.items()]
 
         return np.mean(M(_function_wrapper(self, "compute_recall", N=N),
-                         test_args))
+                         test_args), axis=0)

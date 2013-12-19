@@ -46,6 +46,8 @@ parser.add_argument("--l2v", default=2.0, type=float,
                     help="The L2 strength for the document vectors")
 parser.add_argument("--lda",
                     help="Path to a pre-trained LDA model")
+parser.add_argument("--baseline", action="store_true",
+                    help="Compute the baseline tf-idf recall")
 
 if __name__ == "__main__":
     pool = Pool()
@@ -63,6 +65,7 @@ if __name__ == "__main__":
                          WHERE id=citeulike.arxiv_id)
                      FROM citeulike""")
         data = c.fetchall()
+
         c.execute("SELECT user_id, count(*) FROM citeulike GROUP BY user_id")
         user_counts = c.fetchall()
 
@@ -88,6 +91,27 @@ if __name__ == "__main__":
     arxiv_ids = [None for i in range(len(doc_map))]
     for u, d, aid in data:
         arxiv_ids[doc_map[d]] = aid
+
+    if args.baseline:
+        print("Computing word counts")
+        corpus_counts = defaultdict(int)
+        doc_word_counts = defaultdict(lambda: defaultdict(int))
+        with sqlite3.connect(os.path.join(args.data, "abstracts.db")) as conn:
+            c = conn.cursor()
+            for d in doc_map:
+                c.execute("SELECT * FROM articles WHERE rowid=?", (d, ))
+                doc = c.fetchone()
+                dc = doc_word_counts[doc_map[d]]
+                for w in doc[3].split() + doc[4].split():
+                    dc[w] += 1
+                for w in dc:
+                    corpus_counts[w] += 1
+
+        print("Normalizing word counts")
+        D = len(doc_word_counts)
+        for d, dwc in doc_word_counts.iteritems():
+            for w, dwcw in dwc.iteritems():
+                dwcw *= np.log(D) - np.log(corpus_counts[w])
 
     # Convert the data to integers.
     data = [(user_map[u], doc_map[d], d) for u, d, aid in data]
@@ -141,6 +165,53 @@ if __name__ == "__main__":
     print("{0} folds with {1} entries".format(len(cv_folds),
                                               [len(f) for f in cv_folds]))
 
+    # Concatenate the training set and some of the held-out sets.
+    t = training_set
+    for s in cv_folds[:-1]:
+        t += s
+
+    if args.baseline:
+        print("Training baseline model")
+        user_word_counts = defaultdict(dict)
+        user_training_set = defaultdict(list)
+        for u, d in t:
+            user_word_counts[u] = dict(user_word_counts[u],
+                                       **(doc_word_counts[d]))
+            user_training_set[u].append(d)
+
+        # Compute the test set.
+        test_set = defaultdict(list)
+        for u, d in cv_folds[-1]:
+            test_set[u].append(d)
+
+        print("Computing tf-idf recall")
+        scores = np.empty(len(doc_map))
+        recall_ns = range(50, 501, 50)
+        full_recall = np.zeros(len(recall_ns))
+        for u, tu in test_set.iteritems():
+            vec = user_word_counts[u]
+
+            for d, i in doc_map.iteritems():
+                if d in user_training_set[u]:
+                    scores[i] = 0.0
+                    continue
+                score, norm = 0.0, 0.0
+                for w, c in doc_word_counts[d].iteritems():
+                    score += vec.get(w, 0.0) * c
+                    norm += c*c
+                if norm > 0.0:
+                    scores[i] = score / np.sqrt(norm)
+                else:
+                    scores[i] = 0.0
+
+            # Compute recommendations.
+            inds = np.argsort(scores)[::-1]
+            recall = np.cumsum([i in tu
+                                for i in inds[:max(recall_ns)+1]])/len(tu)
+            full_recall += recall[recall_ns]
+        print(full_recall / len(test_set))
+        assert 0
+
     # Build the ICF model.
     if args.lda is None:
         model = ICF(ntopics, len(user_counts), len(doc_counts),
@@ -152,12 +223,9 @@ if __name__ == "__main__":
 
     # Estimate the random recall rate.
     print("Random recall")
-    print(model.mean_recall([], cv_folds[0], pool=pool))
-
-    # Concatenate the training set and some of the held-out sets.
-    t = training_set
-    for s in cv_folds[:-1]:
-        t += s
+    rand_recall = model.mean_recall([], cv_folds[0], pool=pool)
+    (open(os.path.join(args.outdir, "random-recall.txt"), "w")
+     .write(" ".join(map("{0}".format, rand_recall))))
 
     # Initialize the results file.
     fn = os.path.join(args.outdir, "cf-convergence.txt")
@@ -166,10 +234,17 @@ if __name__ == "__main__":
     # Train the model.
     strt = time.time()
     for i, recall in enumerate(model.train(t, test_set=cv_folds[-1],
-                                           pool=pool)):
+                                           pool=pool,
+                                           lda=args.lda is not None)):
+        if args.lda is not None and i == 0:
+            (open(os.path.join(args.outdir, "lda-recall.txt"), "w")
+             .write(" ".join(map("{0}".format, model.lda_recall))))
+
         print("Iteration {0}: held-out recall = {1}".format(i, recall))
         with open(fn, "a") as f:
-            f.write("{0:d} {1:e} {2:e}\n".format(i, time.time()-strt, recall))
+            f.write("{0:d} {1:e} {2}\n".format(i, time.time()-strt,
+                                               " ".join(map("{0}".format,
+                                                            recall))))
         pickle.dump(model,
                     open(os.path.join(args.outdir,
                          "cf-model.{0:04d}.pkl".format(i)), "wb"), -1)
