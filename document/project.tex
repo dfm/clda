@@ -92,6 +92,28 @@ In this model, the maximum likelihood updates are \cite{ctr}
                      \mathbf{r}_j + \lambda_v\,\theta_j) \nonumber
 \end{eqnarray}
 
+\section{Experiments}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.4\textwidth]{lda-results-k.pdf}
+\caption{%
+The held-out perplexity as a function of runtime for different model
+topic model complexities.
+\figlabel{lda-results}}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.4\textwidth]{results.pdf}
+\caption{%
+The recall curves for the set of tested models.
+From worst to best, the models are: random (blue dots), tf--idf (green
+squares), LDA (red stars), CLDA (purple triangles), and ICF (cyan diamonds).
+See the text for descriptions of these models.
+\figlabel{results}}
+\end{figure}
+
 \newpage
 \begin{multicols}{2}
 \begin{figure*}
