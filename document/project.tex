@@ -29,6 +29,22 @@
 \maketitle
 
 \begin{abstract}
+In this paper, I implement a recommendation engine based on the collaborative
+topic model developed by Wang \& Blei~\shortcite{ctr} and use it to recommend
+scientific articles published on the \emph{ArXiv}.
+This model avoids the ``cold start'' problem that plagues traditional
+collaborative filtering approaches by training a latent representation based
+on a topic model trained on the full ArXiv corpus.
+I evaluate the performance of this model and compare it to several competing
+recommendation algorithms by computing the recall of the recommendations on
+user bibliographies from the CiteULike service.
+On this dataset, a purely collaborative algorithm marginally outperforms the
+collaborative topic model when recommending articles that appear in at least
+five user bibliographies.
+For new articles that are not included in the training bibliographies, the
+collaborative topic model offers excellent recommendations and far outperforms
+a simple tf--idf based cosine distance metric.
+
 The code is available on GitHub at \url{https://github.com/dfm/clda} under
 the terms of the MIT License.
 \end{abstract}
@@ -49,8 +65,8 @@ An interesting place to make progress on this problem is the astrophysics
 literature because the full-text and a set of metadata for almost every paper
 published in the past 20 years is publicly available on the
 \emph{ArXiv}\footnote{\url{http://arxiv.org}}.
-There are also 50--100 articles posted to the ArXiv's \emph{astro-ph} category
-and about the same number again in computer science.
+There are also 50--100 articles posted daily to the ArXiv's \emph{astro-ph}
+category and about the same number again in computer science.
 
 In this paper, I describe and implement a collaborative topic model based on
 Wang \& Blei~\shortcite{ctr}.
@@ -62,8 +78,8 @@ articles from the literature and newly published articles.
 
 \section{Recommendation by collaborative filtering}
 
-A very successful class of recommendation techniques is called collaborative
-filtering.
+A very successful class of recommendation techniques is called
+\emph{collaborative filtering}.
 This problem is generally cast as a matrix factorization model where users and
 documents are described by latent vectors---$\mathbf{u}_i$ and $\mathbf{v}_j$
 respectively---of some dimension $K$ and the predicted rating (by user $i$ of
@@ -146,7 +162,7 @@ For this project, I implemented the \emph{online variational} learning
 algorithm as described by Hoffman \etal~(2010).
 These authors also released a Python implementation of this algorithm---under
 the GPLv3 license---but I independently implemented my own version with a more
-user-friendly API, a more liberal license (MIT), and build-in parallelization.
+user-friendly API, a more liberal license (MIT), and built-in parallelization.
 
 This algorithm has about a dozen tunable parameters (learning rate, vocabulary
 size, number of topics, mini-batch size, hyperparameters, \emph{etc.}) and I
@@ -364,10 +380,16 @@ goals of this project.
 The in-matrix recommendations are not substantially worse than a pure
 collaborative model and the out-of-matrix recommendations are far better than
 the competing tf--idf content based method.
+This is a very promising result because I have found that in practice this
+tf--idf approach offers qualitatively satisfying suggestions when applied to
+the daily listings.
 
 My ultimate goal with this project is to build a web service that offers
 personalized daily ArXiv listings and recommendations that highlight a user's
 interests.
+In this context, the ratings will be constructed with a combination of
+explicit (probably binary likes and dislikes) and implicit (clickthroughs,
+\emph{etc.}) feedback.
 The out-of-matrix CLDA recommendations seem like a good way of going about
 building something like this because the recommendation procedure for new
 articles is both computationally tractable and horizontally scalable.
@@ -411,7 +433,10 @@ C. Wang \& D. Blei.
 \centering
 \includegraphics{clda.pdf}
 \caption{%
-CLDA
+The probabilistic graphical model representation collaborative LDA model.
+The top row of nodes is exactly the standard LDA topic model and the bottom is
+the graphical model representing the probabilistic matrix factorization model
+for collaborative filtering.
 \figlabel{clda}}
 \end{figure*}
 \end{multicols}
