@@ -191,18 +191,18 @@ if __name__ == "__main__":
         for u, tu in test_set.iteritems():
             vec = user_word_counts[u]
 
-            for d, i in doc_map.iteritems():
+            for d in doc_map.values():
                 if d in user_training_set[u]:
-                    scores[i] = 0.0
+                    scores[d] = 0.0
                     continue
                 score, norm = 0.0, 0.0
                 for w, c in doc_word_counts[d].iteritems():
                     score += vec.get(w, 0.0) * c
                     norm += c*c
                 if norm > 0.0:
-                    scores[i] = score / np.sqrt(norm)
+                    scores[d] = score / np.sqrt(norm)
                 else:
-                    scores[i] = 0.0
+                    scores[d] = 0.0
 
             # Compute recommendations.
             inds = np.argsort(scores)[::-1]
