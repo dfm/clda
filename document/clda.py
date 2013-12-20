@@ -25,10 +25,10 @@ pgm.add_node(daft.Node("beta", r"$\beta_{k}$", 5.1, 1))
 pgm.add_node(daft.Node("eta", r"$\eta$", 6.1, 1, fixed=True))
 
 pgm.add_node(daft.Node("lv", r"$\lambda_v$", 1, 0, fixed=True))
-pgm.add_node(daft.Node("v", r"$v$", 2.5, 0))
+pgm.add_node(daft.Node("v", r"$v_d$", 2.5, 0))
 pgm.add_node(daft.Node("lu", r"$\lambda_u$", 6.1, 0, fixed=True))
-pgm.add_node(daft.Node("u", r"$u$", 5.1, 0))
-pgm.add_node(daft.Node("r", r"$r_{d,u}$", 4, 0, observed=True))
+pgm.add_node(daft.Node("u", r"$u_i$", 5.1, 0))
+pgm.add_node(daft.Node("r", r"$r_{i,d}$", 4, 0, observed=True))
 
 pgm.add_edge("alpha", "theta")
 pgm.add_edge("theta", "z")
