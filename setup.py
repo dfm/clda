@@ -1,14 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import numpy
-from setuptools import setup, Extension
-
-ext = Extension("ctr._cf", ["ctr/_cf.c"],
-                include_dirs=[numpy.get_include(), "ctr"],
-                libraries=["blas", "lapack"])
+from setuptools import setup
 
 setup(
-    name="str",
-    ext_modules=[ext],
+    name="clda",
+    version="0.0.1",
+    author="Daniel Foreman-Mackey",
+    author_email="danfm@nyu.edu",
+    packages=["clda"],
+    url="",
+    license="MIT",
+    description="CLDA",
+    long_description="CLDA",
+    package_data={"": ["LICENSE", "README.md"]},
+    include_package_data=True,
+    install_requires=["numpy"],
+    classifiers=[
+        # "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+    ],
 )
