@@ -21,10 +21,14 @@ except ImportError:
 
 from clda.lda import dirichlet_expectation
 
-parser = argparse.ArgumentParser(description="Show the topics from LDA")
+parser = argparse.ArgumentParser(
+    description="Infer the topic distribution for a document")
 parser.add_argument("model", help="The path to the model pickle")
+parser.add_argument("doc", help="path to the document")
 parser.add_argument("-n", "--nwords", type=int, default=15,
                     help="The number of words to show")
+parser.add_argument("--thresh", type=float, default=0.0,
+                    help="The minimum topic fraction to display")
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -32,9 +36,17 @@ if __name__ == "__main__":
         open(os.path.join(os.path.dirname(os.path.abspath(args.model)),
                           "reader.pkl")))
     model = pickle.load(open(args.model))
-    lnbeta = dirichlet_expectation(model.lam)
-    for i, topics in enumerate(lnbeta):
-        inds = np.argsort(topics)
-        print(("Topic {0:3d}: ".format(i) +
-               " ".join([reader.vocab_list[i] for i in inds[-args.nwords:]]))
-              .encode("utf-8"))
+
+    with open(args.doc, "r") as f:
+        doc = reader.parse_document(f.read().decode("utf-8"), resolve=True)
+    # print("[{0}]: {1}".format(doc[1], doc[3]))
+    topic_dist = model.infer(list(doc))
+    prob = np.exp(dirichlet_expectation(topic_dist))
+    inds = np.argsort(topic_dist)[::-1]
+
+    for p, words in zip(prob[inds], model.lam[inds]):
+        if p < args.thresh:
+            break
+        m = np.argsort(words)
+        print("{0:5.2f} % : ".format(p*100),
+              " ".join([reader.vocab_list[i] for i in m[-args.nwords:]]))
